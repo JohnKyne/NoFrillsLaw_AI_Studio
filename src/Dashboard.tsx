@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   ArrowRight, 
   CheckCircle2, 
@@ -16,9 +16,27 @@ import {
   Briefcase,
   Search,
   Settings,
-  HelpCircle
+  HelpCircle,
+  Calendar,
+  CreditCard
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Cal, { getCalApi } from "@calcom/embed-react";
+import { loadStripe } from '@stripe/stripe-js';
+import {
+  EmbeddedCheckoutProvider,
+  EmbeddedCheckout
+} from '@stripe/react-stripe-js';
+
+// Initialize Stripe outside component
+// Make sure to add VITE_STRIPE_PUBLISHABLE_KEY to your .env file
+const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = (publishableKey && typeof publishableKey === 'string' && publishableKey.startsWith('pk_'))
+  ? loadStripe(publishableKey).catch(err => {
+      console.error("Failed to load Stripe script:", err);
+      return null;
+    })
+  : null;
 
 const PRICING_TIERS = [
   {
@@ -62,8 +80,33 @@ const SURCHARGES = [
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('booking');
+  const [checkoutStep, setCheckoutStep] = useState<'selection' | 'calendar' | 'payment'>('selection');
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedSurcharges, setSelectedSurcharges] = useState<Record<string, boolean>>({});
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [stripeError, setStripeError] = useState<string | null>(null);
+
+  // Check for success URL parameters
+  useEffect(() => {
+    const queryParameters = new URLSearchParams(window.location.search);
+    if (queryParameters.get('session_id')) {
+      setCheckoutStep('payment');
+      setClientSecret('success'); // just bypass to show success
+    }
+  }, []);
+
+  useEffect(() => {
+    (async function () {
+      try {
+        const cal = await getCalApi({ embedJsUrl: "https://cal.eu/embed/embed.js" });
+        if (cal) {
+          cal("ui", {"styles":{"branding":{"brandColor":"#000000"}},"hideEventTypeDetails":false,"layout":"month_view"});
+        }
+      } catch (err) {
+        console.error("Cal API could not be loaded:", err);
+      }
+    })();
+  }, []);
 
   const allItems = PRICING_TIERS.flatMap(tier => tier.items);
   const selectedService = allItems.find(i => i.id === selectedServiceId);
@@ -86,6 +129,43 @@ export default function Dashboard() {
       }
     });
     return total;
+  };
+
+  const startCheckout = async () => {
+    if (!selectedService) return;
+    
+    // Move to calendar booking first
+    setCheckoutStep('calendar');
+  };
+
+  const proceedToPayment = async () => {
+    setCheckoutStep('payment');
+    
+    try {
+      // For MVP placeholder, or connect to the actual endpoint
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          priceId: selectedService?.id,
+          amount: calculateTotal(),
+          serviceName: selectedService?.name
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.clientSecret) {
+        setClientSecret(data.clientSecret);
+      } else {
+        setStripeError(data.error || 'Failed to initialize payment gateway.');
+      }
+    } catch (err) {
+      console.error(err);
+      setStripeError('Could not connect to payment server. Please ensure backend is running with valid Stripe Secret Key.');
+    }
   };
 
   return (
@@ -172,78 +252,179 @@ export default function Dashboard() {
             <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
               
               <div className="flex-1 w-full min-w-0 space-y-8">
-                <section className="bg-bg-base p-6 lg:p-8 rounded-sm border border-border-neutral shadow-sm">
-                  <div className="mb-6 flex items-baseline justify-between border-b border-border-neutral pb-4">
-                    <h2 className="text-xl font-semibold">1. Select Matter Category</h2>
-                    <span className="text-xs font-mono text-ink-body/50">Required</span>
-                  </div>
-
-                  <div className="space-y-8">
-                    {PRICING_TIERS.map(tier => (
-                      <div key={tier.category}>
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-ink-body/60 mb-3">{tier.category}</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {tier.items.map(item => (
-                            <button
-                              key={item.id}
-                              onClick={() => setSelectedServiceId(item.id)}
-                              className={`text-left p-4 rounded-sm border transition-all ${selectedServiceId === item.id ? 'border-accent-forest bg-accent-forest/5 ring-1 ring-accent-forest' : 'border-border-neutral bg-bg-base hover:border-ink-body/30'}`}
-                            >
-                              <div className="flex justify-between items-start mb-2">
-                                <span className={`text-sm font-medium ${selectedServiceId === item.id ? 'text-accent-forest' : 'text-ink-body'}`}>{item.name}</span>
-                                {selectedServiceId === item.id && <CheckCircle2 size={16} className="text-accent-forest" />}
-                              </div>
-                              <div className="flex items-baseline gap-1 mt-auto pt-2">
-                                <span className="text-lg font-mono font-medium">€{item.price}</span>
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-ink-body/50">
-                                  {item.type === 'yearly' ? 'per year' : 'fixed fee'}
-                                </span>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
+                {checkoutStep === 'selection' && (
+                  <>
+                    <section className="bg-bg-base p-6 lg:p-8 rounded-sm border border-border-neutral shadow-sm">
+                      <div className="mb-6 flex items-baseline justify-between border-b border-border-neutral pb-4">
+                        <h2 className="text-xl font-semibold">1. Select Matter Category</h2>
+                        <span className="text-xs font-mono text-ink-body/50">Required</span>
                       </div>
-                    ))}
-                  </div>
-                </section>
 
-                <section className={`bg-bg-base p-6 lg:p-8 rounded-sm border transition-colors shadow-sm ${!selectedService ? 'opacity-50 border-border-neutral pointer-events-none' : 'border-border-neutral'}`}>
-                  <div className="mb-6 flex items-baseline justify-between border-b border-border-neutral pb-4">
-                    <h2 className="text-xl font-semibold">2. Accelerators & Options</h2>
-                    <span className="text-xs font-mono text-ink-body/50">Optional</span>
-                  </div>
-
-                  <div className="space-y-3">
-                    {SURCHARGES.map(surcharge => (
-                      <label 
-                        key={surcharge.id}
-                        className={`flex items-center justify-between p-4 border rounded-sm cursor-pointer transition-colors ${selectedSurcharges[surcharge.id] ? 'bg-bg-accent border-ink-bold/30' : 'bg-bg-base border-border-neutral hover:bg-bg-accent/50'}`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="hidden"
-                          checked={selectedSurcharges[surcharge.id] || false}
-                          onChange={() => toggleSurcharge(surcharge.id)}
-                        />
-                        <div className="flex items-center gap-3">
-                          <div className={`w-4 h-4 rounded-sm border flex items-center justify-center ${selectedSurcharges[surcharge.id] ? 'bg-ink-bold border-ink-bold' : 'border-ink-body/30 bg-bg-base'}`}>
-                            {selectedSurcharges[surcharge.id] && <CheckCircle2 size={12} className="text-bg-base" />}
+                      <div className="space-y-8">
+                        {PRICING_TIERS.map(tier => (
+                          <div key={tier.category}>
+                            <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-ink-body/60 mb-3">{tier.category}</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {tier.items.map(item => (
+                                <button
+                                  key={item.id}
+                                  onClick={() => setSelectedServiceId(item.id)}
+                                  className={`text-left p-4 rounded-sm border transition-all ${selectedServiceId === item.id ? 'border-accent-forest bg-accent-forest/5 ring-1 ring-accent-forest' : 'border-border-neutral bg-bg-base hover:border-ink-body/30'}`}
+                                >
+                                  <div className="flex justify-between items-start mb-2">
+                                    <span className={`text-sm font-medium ${selectedServiceId === item.id ? 'text-accent-forest' : 'text-ink-body'}`}>{item.name}</span>
+                                    {selectedServiceId === item.id && <CheckCircle2 size={16} className="text-accent-forest" />}
+                                  </div>
+                                  <div className="flex items-baseline gap-1 mt-auto pt-2">
+                                    <span className="text-lg font-mono font-medium">€{item.price}</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-ink-body/50">
+                                      {item.type === 'yearly' ? 'per year' : 'fixed fee'}
+                                    </span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                          <span className="text-sm font-medium">{surcharge.name}</span>
-                        </div>
-                        <span className="text-sm font-mono">+€{surcharge.price}</span>
-                      </label>
-                    ))}
-                  </div>
-                  
-                  <div className="mt-6 bg-amber-50 border border-amber-200/50 p-4 rounded-sm flex items-start gap-3 text-amber-900">
-                    <Info size={16} className="shrink-0 mt-0.5" />
-                    <p className="text-xs leading-relaxed">
-                      Custom modifications or failure to provide accurate initial documentation may incur automatic <span className="font-semibold">Complexity Penalties</span> (€30 - €50). By proceeding, you accept our standard deterministic protocol.
-                    </p>
-                  </div>
-                </section>
+                        ))}
+                      </div>
+                    </section>
 
+                    <section className={`bg-bg-base p-6 lg:p-8 rounded-sm border transition-colors shadow-sm ${!selectedService ? 'opacity-50 border-border-neutral pointer-events-none' : 'border-border-neutral'}`}>
+                      <div className="mb-6 flex items-baseline justify-between border-b border-border-neutral pb-4">
+                        <h2 className="text-xl font-semibold">2. Accelerators & Options</h2>
+                        <span className="text-xs font-mono text-ink-body/50">Optional</span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {SURCHARGES.map(surcharge => (
+                          <label 
+                            key={surcharge.id}
+                            className={`flex items-center justify-between p-4 border rounded-sm cursor-pointer transition-colors ${selectedSurcharges[surcharge.id] ? 'bg-bg-accent border-ink-bold/30' : 'bg-bg-base border-border-neutral hover:bg-bg-accent/50'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="hidden"
+                              checked={selectedSurcharges[surcharge.id] || false}
+                              onChange={() => toggleSurcharge(surcharge.id)}
+                            />
+                            <div className="flex items-center gap-3">
+                              <div className={`w-4 h-4 rounded-sm border flex items-center justify-center ${selectedSurcharges[surcharge.id] ? 'bg-ink-bold border-ink-bold' : 'border-ink-body/30 bg-bg-base'}`}>
+                                {selectedSurcharges[surcharge.id] && <CheckCircle2 size={12} className="text-bg-base" />}
+                              </div>
+                              <span className="text-sm font-medium">{surcharge.name}</span>
+                            </div>
+                            <span className="text-sm font-mono">+€{surcharge.price}</span>
+                          </label>
+                        ))}
+                      </div>
+                      
+                      <div className="mt-6 bg-amber-50 border border-amber-200/50 p-4 rounded-sm flex items-start gap-3 text-amber-900">
+                        <Info size={16} className="shrink-0 mt-0.5" />
+                        <p className="text-xs leading-relaxed">
+                          Custom modifications or failure to provide accurate initial documentation may incur automatic <span className="font-semibold">Complexity Penalties</span> (€30 - €50). By proceeding, you accept our standard deterministic protocol.
+                        </p>
+                      </div>
+                    </section>
+                  </>
+                )}
+
+                {checkoutStep === 'calendar' && (
+                  <section className="bg-bg-base p-6 lg:p-8 rounded-sm border border-border-neutral shadow-sm space-y-6">
+                    <div className="flex items-center gap-4 border-b border-border-neutral pb-4">
+                      <button 
+                         onClick={() => setCheckoutStep('selection')}
+                         className="p-2 hover:bg-bg-accent rounded-sm transition-colors border border-border-neutral/50"
+                      >
+                         <ChevronRight size={16} className="rotate-180" />
+                      </button>
+                      <div>
+                        <h2 className="text-xl font-semibold">Schedule Intake Session</h2>
+                        <span className="text-xs text-ink-body/60 mt-1 block">Step 2 of 3</span>
+                      </div>
+                    </div>
+                    
+                    <div className="w-full min-h-[500px] border border-border-neutral rounded-sm overflow-hidden bg-bg-accent/30">
+                       <Cal 
+                         calOrigin="https://cal.eu"
+                         calLink="nofrillslaw"
+                         style={{width:"100%",height:"100%",overflow:"scroll"}}
+                         config={{layout: 'month_view'}}
+                       />
+                    </div>
+                    
+                    <div className="flex justify-end pt-4 border-t border-border-neutral">
+                       <button 
+                         onClick={proceedToPayment}
+                         className="bg-ink-bold text-bg-base px-8 py-3 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:opacity-90 transition-all rounded-sm"
+                       >
+                         Continue to Payment
+                         <ArrowRight size={16} />
+                       </button>
+                    </div>
+                  </section>
+                )}
+
+                {checkoutStep === 'payment' && (
+                  <section className="bg-bg-base p-6 lg:p-8 rounded-sm border border-border-neutral shadow-sm space-y-6">
+                    <div className="flex items-center gap-4 border-b border-border-neutral pb-4">
+                      <button 
+                         onClick={() => setCheckoutStep('calendar')}
+                         className="p-2 hover:bg-bg-accent rounded-sm transition-colors border border-border-neutral/50"
+                      >
+                         <ChevronRight size={16} className="rotate-180" />
+                      </button>
+                      <div>
+                        <h2 className="text-xl font-semibold">Secure Payment</h2>
+                        <span className="text-xs text-ink-body/60 mt-1 block">Step 3 of 3</span>
+                      </div>
+                    </div>
+
+                    {stripeError && (
+                      <div className="bg-red-50 text-red-700 p-4 border border-red-200 rounded-sm text-sm">
+                        {stripeError}
+                      </div>
+                    )}
+
+                    {!clientSecret && !stripeError && (
+                      <div className="py-20 flex flex-col items-center justify-center space-y-4">
+                        <div className="w-8 h-8 rounded-full border-2 border-border-neutral border-t-accent-forest animate-spin" />
+                        <span className="text-xs uppercase tracking-widest font-bold opacity-50">Initializing Secure Gateway</span>
+                      </div>
+                    )}
+
+                    {clientSecret === 'success' ? (
+                      <div className="py-20 flex flex-col items-center justify-center space-y-6 text-center">
+                        <div className="w-16 h-16 rounded-full bg-accent-forest/10 flex items-center justify-center">
+                           <CheckCircle2 size={32} className="text-accent-forest" />
+                        </div>
+                        <div>
+                          <h3 className="text-2xl font-semibold mb-2">Matter Confirmed</h3>
+                          <p className="text-ink-body/70 text-sm max-w-sm mx-auto">
+                            Your payment has been successfully processed and your intake session is scheduled.
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => { setCheckoutStep('selection'); setClientSecret(null); }}
+                          className="bg-border-neutral px-6 py-2 text-xs font-bold uppercase tracking-widest rounded-sm mt-4 hover:bg-border-neutral/80"
+                        >
+                          Return to Dashboard
+                        </button>
+                      </div>
+                    ) : clientSecret ? (
+                      <div className="w-full min-h-[400px]">
+                        {stripePromise ? (
+                          <EmbeddedCheckoutProvider stripe={stripePromise} options={{clientSecret}}>
+                            <EmbeddedCheckout />
+                          </EmbeddedCheckoutProvider>
+                        ) : (
+                          <div className="bg-red-50 text-red-700 p-4 border border-red-200 rounded-sm text-sm">
+                            VITE_STRIPE_PUBLISHABLE_KEY is missing. Please configure it in your environment variables.
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </section>
+                )}
               </div>
 
               <div className="w-full lg:w-80 flex-shrink-0">
@@ -290,13 +471,20 @@ export default function Dashboard() {
                         </div>
                       </div>
                       
-                      <button 
-                        disabled={!selectedService}
-                        className={`w-full py-3.5 text-sm font-bold uppercase tracking-widest rounded-sm transition-all flex justify-center items-center gap-2 ${selectedService ? 'bg-accent-forest text-white hover:bg-accent-hover shadow-sm' : 'bg-border-neutral text-ink-body/30 cursor-not-allowed'}`}
-                      >
-                        Proceed to Verification
-                        <ArrowRight size={16} />
-                      </button>
+                      {checkoutStep === 'selection' ? (
+                        <button 
+                          onClick={startCheckout}
+                          disabled={!selectedService}
+                          className={`w-full py-3.5 text-sm font-bold uppercase tracking-widest rounded-sm transition-all flex justify-center items-center gap-2 ${selectedService ? 'bg-accent-forest text-white hover:bg-accent-hover shadow-sm' : 'bg-border-neutral text-ink-body/30 cursor-not-allowed'}`}
+                        >
+                          Checkout & Schedule
+                          <ArrowRight size={16} />
+                        </button>
+                      ) : (
+                        <span className="block text-center text-xs font-bold uppercase tracking-widest text-ink-body/50 py-2 border border-border-neutral border-dashed rounded-sm">
+                          {checkoutStep === 'calendar' ? 'Booking in Progress...' : 'Awaiting Payment...'}
+                        </span>
+                      )}
                       <p className="text-center text-[10px] uppercase font-bold tracking-widest text-ink-body/40 mt-4">
                         Secure SSL Connection
                       </p>
