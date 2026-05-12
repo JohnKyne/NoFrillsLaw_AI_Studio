@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-bg-base: #FFFFFF;
+  --color-bg-accent: #F7F7F7;
+  --color-ink-bold: #000000;
+  --color-ink-body: #1F1F1F;
+  --color-accent-forest: #0D3020;
+  --color-accent-hover: #144931;
+  --color-accent-press: #081B12;
+  --color-border-neutral: #E5E5E5;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-accent text-ink-body antialiased selection:bg-accent-forest selection:text-white font-sans;
+    font-size: 16px;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-sans font-medium text-ink-bold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
