@@ -11,6 +11,8 @@
  *   download <judgments|determinations|*-archive>  pull the PDFs (b)
  *   high-court [--from Y] [--to Y]    two-step High Court records (segmented)
  *              [--no-details]         list only (skip step 2)
+ *   legal-diary                      today's bulk Legal Diary (PDF+DOCX, all
+ *                                    courts); run on a schedule to accumulate
  *   probate    [--years a,b,..]       probate grants — full year sweep
  *              [--lastnames a,b]      optional surname filter instead
  *   all                              run every collector sequentially
@@ -36,6 +38,7 @@ import { collectDownloads } from './collectors/download.js';
 import { collectHighCourt } from './collectors/highCourt.js';
 import { collectProbate } from './collectors/probate.js';
 import { collectArchive } from './collectors/judgmentsArchive.js';
+import { collectLegalDiary } from './collectors/legalDiary.js';
 
 function parseArgs(argv: string[]) {
   const flags: Record<string, string | boolean> = {};
@@ -118,6 +121,12 @@ async function main() {
       });
       break;
 
+    case 'legal-diary':
+      // Captures the CURRENT day's diary (all courts). Run on a schedule to
+      // accumulate an archive — older editions aren't retained server-side.
+      await collectLegalDiary({ http, cfg });
+      break;
+
     case 'probate': {
       const years = flags.years
         ? String(flags.years).split(',').map(Number)
@@ -138,7 +147,7 @@ async function main() {
       console.error(
         'Unknown command. Use: judgments | determinations | ' +
           'judgments-archive | determinations-archive | download | ' +
-          'high-court | probate | all\nSee crawler/README.md for flags.',
+          'high-court | probate | legal-diary | all\nSee crawler/README.md for flags.',
       );
       process.exit(1);
   }

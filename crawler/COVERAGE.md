@@ -121,11 +121,14 @@ case-record system; CoA / Supreme / Circuit / District do **not**:
   outside FOI, reserved to the parties / their legal reps; a non-party must
   apply to the relevant Court Office for a judge's decision — there is no public
   online register.
-- The **Legal Diary** (legaldiary.courts.ie / CSOL) lists scheduled cases for
-  Supreme, CoA, High, Central Criminal and Circuit courts — but that is a
-  *calendar*, not a records database.
-- Historical Circuit/District files sit with the **National Archives** (offline,
-  by visit; family-law files closed to the public).
+- The **Legal Diary** (legaldiary.courts.ie) lists scheduled cases for every
+  court incl. Circuit and District — a *calendar*, not a records database. We
+  capture its daily bulk download via the `legal-diary` collector (PDF+DOCX,
+  forward-accumulating); the per-court structured listings are JS-rendered and
+  their data API is not openly exposed (403), so only the bulk file is pulled.
+- Historical Circuit/District files sit with the **National Archives**, which
+  states they are *available onsite* (order and read in person) — physical,
+  not crawlable; family-law files are closed to the public. Not pulled.
 
 Sources: courts.ie/access-court-records, gov.ie "Access Court Judgments and
 Determinations", National Archives court-records collections, IRLII case-search,

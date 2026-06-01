@@ -36,6 +36,7 @@ export const DEFAULT_CONFIG: CrawlerConfig = {
     'www.courts.ie': 10_000,
     'www2.courts.ie': 10_000,
     'ww2.courts.ie': 10_000, // the by-year Solr search redirects here
+    'legaldiary.courts.ie': 10_000,
     'courts.ie': 10_000,
   },
   defaultDelayMs: 10_000,

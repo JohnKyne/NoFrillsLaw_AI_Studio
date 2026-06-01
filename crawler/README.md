@@ -48,6 +48,7 @@ crawler/
 | `download <corpus>` | the JSONL above | `pdfs/<court>/<citation>.pdf`, `<corpus>-downloads.jsonl` | Downloads PDFs for a captured corpus. Resumable. |
 | `high-court` | `courts.ie/high-court-search` | `high-court-list.jsonl`, `high-court-detail.jsonl` | ✅ Full (year sweep; paging uncapped, verified to 25k). 1-based paging; `page=0` = count only. |
 | `probate` | `www.courts.ie/app/probate-register` | `probate.jsonl` | ✅ Full by year of death (empty-lastname + year = all grants for that year). |
+| `legal-diary` | `legaldiary.courts.ie/download` | `legal-diary/<date>__*.pdf\|docx`, `legal-diary.jsonl` | ⏩ Today's bulk diary, all courts (incl. Circuit/District). Forward-only — run on a schedule to accumulate. |
 
 ### Archive collector (plain HTTP)
 
@@ -91,6 +92,7 @@ npx tsx crawler/index.ts high-court --from 2015 --to 2024 # two-step, segmented 
 npx tsx crawler/index.ts high-court --no-details          # list only (fast)
 npx tsx crawler/index.ts probate --years 2020,2021        # full year sweep
 npx tsx crawler/index.ts probate --lastnames murphy,kelly --years 2020
+npx tsx crawler/index.ts legal-diary                      # today's diary (all courts)
 npx tsx crawler/index.ts all
 
 # global flags
