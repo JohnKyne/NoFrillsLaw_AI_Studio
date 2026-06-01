@@ -103,6 +103,24 @@ npx tsx crawler/index.ts all
 Re-running a command **resumes** from `data/.cursors/<collector>.json`. Delete
 the cursor file to restart a collector from scratch.
 
+## Scheduling the Legal Diary
+
+The diary site only retains the **current** edition, so the archive has to be
+accumulated by capturing it daily. A scheduled GitHub Actions workflow does this:
+
+- `.github/workflows/legal-diary.yml` — runs `legal-diary` daily at 06:30 UTC,
+  writing to `crawler/diary-archive/` and committing any new files. Scheduled
+  workflows run only from the **default branch**, so it starts once merged
+  there; until then trigger it from the Actions tab ("Run workflow").
+
+Prefer your own box instead of CI? A portable cron line:
+
+```cron
+30 6 * * *  cd /path/to/repo && /usr/bin/npx tsx crawler/index.ts legal-diary --out crawler/diary-archive
+```
+
+Both are idempotent — same-day re-runs skip already-captured files.
+
 ## Politeness & caveats
 
 - **robots.txt** on `www.courts.ie` and `www2.courts.ie` declares

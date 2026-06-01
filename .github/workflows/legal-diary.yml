@@ -1,0 +1,53 @@
+name: Legal Diary daily capture
+
+# Captures the current Legal Diary (all courts) once a day and commits it, so an
+# archive accumulates over time (the site only retains the current edition).
+#
+# NOTE: scheduled workflows run only from the repository's DEFAULT branch, so
+# this starts firing once merged there. Until then, trigger it manually from the
+# Actions tab ("Run workflow") to test.
+
+on:
+  schedule:
+    # 06:30 UTC daily (~07:30 Irish summer). Diaries publish a day ahead.
+    - cron: '30 6 * * *'
+  workflow_dispatch: {} # allow manual runs
+
+# Prevent overlapping runs; let a new run cancel a stuck one.
+concurrency:
+  group: legal-diary
+  cancel-in-progress: false
+
+permissions:
+  contents: write # needed to commit the captured files
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    env:
+      # legal-diary needs no browser; skip Playwright's 100MB+ download on install.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Capture today's Legal Diary
+        run: npx tsx crawler/index.ts legal-diary --out crawler/diary-archive
+
+      - name: Commit new diary files (if any)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add crawler/diary-archive
+          if git diff --cached --quiet; then
+            echo "No new diary files today."
+          else
+            git commit -m "chore(legal-diary): capture $(date -u +%Y-%m-%d) [skip ci]"
+            git push
+          fi
