@@ -5,7 +5,10 @@
  *
  *   judgments                        recent judgments listing (capped window)
  *   determinations                   recent determinations listing (capped)
- *   download <judgments|determinations>   pull the PDFs for a crawled corpus (b)
+ *   judgments-archive [--from Y]     FULL judgment archive via headless browser
+ *     [--to Y] [--headed] [--debug]  (needs Playwright; drives the by-year form)
+ *   determinations-archive ...       FULL determinations archive (same engine)
+ *   download <judgments|determinations|*-archive>  pull the PDFs (b)
  *   high-court [--from Y] [--to Y]    two-step High Court records (segmented)
  *              [--no-details]         list only (skip step 2)
  *   probate    [--years a,b,..]       probate grants — full year sweep
@@ -24,12 +27,15 @@
  * are not (the browse listings are capped; the full corpus is behind an
  * Alfresco AJAX search this CLI does not yet drive).
  */
-import { DEFAULT_CONFIG, ENDPOINTS, HCS_MIN_YEAR, type CrawlerConfig } from './config.js';
+import {
+  DEFAULT_CONFIG, ENDPOINTS, HCS_MIN_YEAR, ARCHIVE_MIN_YEAR, type CrawlerConfig,
+} from './config.js';
 import { HttpClient } from './lib/http.js';
 import { collectPdfListing } from './collectors/pdfListing.js';
 import { collectDownloads } from './collectors/download.js';
 import { collectHighCourt } from './collectors/highCourt.js';
 import { collectProbate } from './collectors/probate.js';
+import { collectArchive } from './collectors/judgmentsArchive.js';
 
 function parseArgs(argv: string[]) {
   const flags: Record<string, string | boolean> = {};
@@ -74,10 +80,29 @@ async function main() {
       await collectPdfListing({ http, cfg, name: 'determinations', listUrl: ENDPOINTS.determinationsList });
       break;
 
+    case 'judgments-archive':
+      await collectArchive({
+        cfg, name: 'judgments-archive', browseUrl: ENDPOINTS.judgmentsByYear,
+        fromYear: flags.from ? Number(flags.from) : ARCHIVE_MIN_YEAR,
+        toYear: flags.to ? Number(flags.to) : thisYear,
+        headless: !flags.headed, debug: Boolean(flags.debug),
+      });
+      break;
+
+    case 'determinations-archive':
+      await collectArchive({
+        cfg, name: 'determinations-archive', browseUrl: ENDPOINTS.determinationsByYear,
+        fromYear: flags.from ? Number(flags.from) : ARCHIVE_MIN_YEAR,
+        toYear: flags.to ? Number(flags.to) : thisYear,
+        headless: !flags.headed, debug: Boolean(flags.debug),
+      });
+      break;
+
     case 'download': {
       const source = positional[1];
-      if (source !== 'judgments' && source !== 'determinations') {
-        console.error('Usage: download <judgments|determinations>');
+      const valid = ['judgments', 'determinations', 'judgments-archive', 'determinations-archive'];
+      if (!valid.includes(source)) {
+        console.error(`Usage: download <${valid.join('|')}>`);
         process.exit(1);
       }
       await collectDownloads({ http, cfg, source });
@@ -111,7 +136,8 @@ async function main() {
 
     default:
       console.error(
-        'Unknown command. Use: judgments | determinations | download | ' +
+        'Unknown command. Use: judgments | determinations | ' +
+          'judgments-archive | determinations-archive | download | ' +
           'high-court | probate | all\nSee crawler/README.md for flags.',
       );
       process.exit(1);

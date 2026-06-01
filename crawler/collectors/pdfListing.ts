@@ -22,22 +22,12 @@
 import { HttpClient } from '../lib/http.js';
 import { JsonlWriter } from '../lib/jsonl.js';
 import { Cursor } from '../lib/cursor.js';
+import { courtFromCitation, citationFromFilename } from '../lib/citation.js';
 import type { CrawlerConfig } from '../config.js';
 import type { JudgmentRecord } from '../types.js';
 
 /** Filenames that are page chrome, not judgments. */
 const CHROME_PDF = /Searching-Judgments\.pdf$/i;
-
-function courtFromCitation(citation: string | null): string | null {
-  if (!citation) return null;
-  if (citation.includes('IESCDET')) return 'Supreme Court (Determination)';
-  const token = citation.match(/^\d{4}_IE([A-Z]+)_/)?.[1];
-  const map: Record<string, string> = {
-    SC: 'Supreme Court', CA: 'Court of Appeal', HC: 'High Court',
-    CC: 'Circuit Court', DC: 'District Court', CCC: 'Central Criminal Court',
-  };
-  return token ? map[token] ?? `Unknown (IE${token})` : null;
-}
 
 /** Extract judgment PDF links (excluding chrome) from one listing page. */
 function parseListingPage(html: string, page: number): JudgmentRecord[] {
@@ -51,7 +41,7 @@ function parseListingPage(html: string, page: number): JudgmentRecord[] {
     if (CHROME_PDF.test(filename) || seen.has(uuid)) continue;
     seen.add(uuid);
     const base = decodeURIComponent(filename).replace(/\.pdf$/i, '');
-    const citation = base.match(/\d{4}_IE[A-Z]+_?\d*/i)?.[0] ?? null;
+    const citation = citationFromFilename(filename);
     out.push({
       citation,
       court: courtFromCitation(citation),

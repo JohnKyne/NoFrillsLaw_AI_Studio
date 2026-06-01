@@ -20,28 +20,48 @@ crawler/
     cursor.ts               resumable JSON checkpoints
     jsonl.ts                append-only JSONL writer
   collectors/
-    pdfListing.ts           judgments + determinations (PDF-link harvest)
+    pdfListing.ts           judgments + determinations recent listing (links)
+    judgmentsArchive.ts     FULL archive via headless browser (Playwright)
     download.ts             pull the actual PDFs for a crawled corpus (b)
     highCourt.ts            High Court two-step (list -> detail) + segmenter (a)
     probate.ts              probate single-step (GET form -> cards)
   lib/fetchFile.ts          streaming, resumable file downloader
-  data/                     output (gitignored): *.jsonl, pdfs/, .cursors/
+  lib/citation.ts           neutral-citation -> court helpers
+  data/                     output (gitignored): *.jsonl, pdfs/, debug/, .cursors/
 ```
 
 > **Read `COVERAGE.md` first.** High Court records and probate are fully
-> coverable; the judgment/determination *archives* are **not** (browse listings
-> are capped — the full corpus sits behind an Alfresco AJAX search this CLI
-> doesn't yet drive).
+> coverable over plain HTTP; the full judgment/determination *archives* are
+> reachable only via the Playwright `*-archive` collectors (the browse listings
+> are capped and the search is AJAX-gated). The only true gap is *structured
+> case records* for non-High-Court tiers, which don't exist publicly.
 
 ## What each collector covers
 
 | Command | Source | Output | Coverage |
 |---|---|---|---|
-| `judgments` | `www2.courts.ie/Judgments` | `judgments.jsonl` | ⚠️ **Recent window only** (~196). Full archive needs the Alfresco search — see COVERAGE.md. |
+| `judgments` | `www2.courts.ie/Judgments` | `judgments.jsonl` | ⚠️ **Recent window only** (~196). Use `judgments-archive` for the full set. |
 | `determinations` | `www2.courts.ie/determinations` | `determinations.jsonl` | ⚠️ Recent window only (~24). |
-| `download <corpus>` | the JSONL above | `pdfs/<court>/<citation>.pdf`, `<corpus>-downloads.jsonl` | Downloads PDFs for whatever the listing captured. Resumable. |
+| `judgments-archive` | `www2.courts.ie/judgments-year` (Playwright) | `judgments-archive.jsonl` | ✅ **Full archive**, all courts, by year 2001–present. Needs Playwright. |
+| `determinations-archive` | `www2.courts.ie/determinations-year` (Playwright) | `determinations-archive.jsonl` | ✅ Full determinations archive. |
+| `download <corpus>` | the JSONL above | `pdfs/<court>/<citation>.pdf`, `<corpus>-downloads.jsonl` | Downloads PDFs for a captured corpus. Resumable. |
 | `high-court` | `courts.ie/high-court-search` | `high-court-list.jsonl`, `high-court-detail.jsonl` | ✅ Full (year sweep; paging uncapped, verified to 25k). 1-based paging; `page=0` = count only. |
 | `probate` | `www.courts.ie/app/probate-register` | `probate.jsonl` | ✅ Full by year of death (empty-lastname + year = all grants for that year). |
+
+### Archive collector (Playwright)
+
+The browse listings are capped to recent uploads; the full archive is exposed
+only through the by-year pages, whose year `<select>` drives a Drupal AJAX form
+that no plain HTTP request can trigger (POST 302s home; `/system/ajax` returns
+empty — see COVERAGE.md). `judgmentsArchive.ts` drives it in a real browser.
+
+```bash
+npm install && npx playwright install chromium
+npx tsx crawler/index.ts judgments-archive --from 2001 --to 2026
+npx tsx crawler/index.ts judgments-archive --debug   # dump screenshots+HTML/year
+npx tsx crawler/index.ts download judgments-archive  # then fetch the PDFs
+```
+Flags: `--from`/`--to`, `--headed` (watch it run), `--debug` (calibrate selectors).
 
 ## The two-step (High Court only)
 

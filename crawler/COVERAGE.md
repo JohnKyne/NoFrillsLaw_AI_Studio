@@ -9,11 +9,16 @@ before assuming "full coverage".
 |---|---|---|
 | **High Court case records** | ✅ Yes | Year sweep; paging is uncapped below each query's total (verified to 25k). |
 | **Probate grants** | ✅ Yes (by year of death) | Empty-lastname + year returns every grant for that year. |
-| **Judgments (full-text archive)** | ❌ No | Browse listing is capped to ~recent; full archive is behind an Alfresco AJAX search not yet driven. |
-| **Determinations (full-text archive)** | ❌ No | Same Alfresco cap (~24 recent on the listing). |
-| Circuit / District / CoA / Supreme **case records** | ❌ N/A | No such public searchable dataset exists — only the High Court has one. |
+| **Judgments (full-text archive)** | ✅ Yes — via Playwright | Browse listing is capped, but the `judgments-archive` collector drives the by-year form in a headless browser to reach the full archive. |
+| **Determinations (full-text archive)** | ✅ Yes — via Playwright | Same engine against `/determinations-year`. |
+| Circuit / District / CoA / Supreme **judgments** | ✅ In the archive | The by-year archive spans all courts; CoA (IECA), Supreme (IESC) and Circuit (IECC) judgments are confirmed present. |
+| Circuit / District / CoA / Supreme **case records** | ❌ N/A | No such public searchable dataset exists — only the High Court has structured case records. |
 
-So: **case-record and probate coverage is complete; judgment-archive coverage is not.**
+So: **case records (High Court) + probate are complete via plain HTTP; the full
+judgment/determination archives are reachable but require the Playwright
+collector** (`judgments-archive` / `determinations-archive`). The only true gap
+is *structured case records* for the non-High-Court tiers, which simply don't
+exist publicly.
 
 ## Evidence
 
@@ -40,34 +45,57 @@ years partition the DB cleanly. The collector therefore sweeps by year with an
 empty surname for completeness. Caveat: grants with a blank/unknown year of
 death won't appear in a year sweep — pass explicit `--lastnames` to chase those.
 
-**Judgments / determinations listings are capped.**
+**Judgments / determinations listings are capped — and no HTTP hack opens them.**
 `/Judgments?sort=desc:DateUploaded` returns ~100 PDFs on page 0, ~96 on page 1,
-then only the page-chrome help PDF from page 2 on (~196 real judgments total).
-`/determinations` returns ~24 on page 0, then nothing. These are *recent
-windows*, not the archive. The Irish judgment archive (tens of thousands of
-documents back to ~2001, with all-court filters) is served by the Drupal
-"alfresco" search form (`alfresco_Court[]`, `alfresco_fromdate/todate`,
-`alfresco_NeutralCitation`, `alfresco_JudgmentBy`). A plain form POST 302-
-redirects to the homepage — the search is JS/AJAX-driven against an Alfresco
-backend that this CLI does not yet call.
+then only the page-chrome help PDF (~196 real judgments total). `/determinations`
+returns ~24 on page 0, then nothing. Things that DON'T work (all tested):
 
-## To reach the full judgment archive (not yet implemented)
+- GET keyword/wildcard/year params (`keys=e`, `keys=*`, `alfresco_NeutralCitation=2015`,
+  `selected_year=2015`, `alfresco_todate=2015`) — **ignored**; always the default 100.
+- POST the form, even with a cache-busted **live** `form_build_id` + cookies —
+  **302 to the homepage** (104,875 B).
+- `POST /system/ajax` (Drupal AJAX endpoint) — 200 but **empty body** (form not
+  in the server cache; the page is edge-cached so anonymous build_ids aren't stored).
+- Direct Alfresco REST (`/acc/alfresco/api/.../search`, `/service/...`, CMIS) — 404.
 
-One of:
-1. **Reverse-engineer the Alfresco AJAX endpoint** the search form calls
-   (inspect the `js_*.js` Drupal aggregate or a browser Network tab), then
-   page it by date window / court / citation. Cleanest if it returns JSON.
-2. **Drive the form with a headless browser** (Playwright): fill
-   `alfresco_fromdate`/`alfresco_todate` in monthly windows × each
-   `alfresco_Court[]`, scrape the rendered result PDFs, paginate. Robust but
-   slow. This would slot in as a new `collectors/judgmentsArchive.ts` behind
-   the same rate-limiter and cursor.
-3. **Use an external aggregator** (e.g. BAILII / vLex / the IECLR datasets)
-   for historical Irish judgments if licence terms permit.
+The vowel/`*` "return everything" trick can't even be applied: the keyword field
+is only reachable once the page's JS fires the AJAX call. So the archive is
+genuinely **JS/AJAX-gated**.
 
-Until one of those lands, treat `judgments`/`determinations` here as
-"recent-uploads only", and `download` as fetching the PDFs for whatever those
-collectors captured.
+**Court census of the browsable listing** (asc+desc, pages 0–1) — confirms lower
+courts are present as judgments:
+
+```
+IEHC 548   High Court
+IECA 124   Court of Appeal
+IESC  20   Supreme Court
+IECC  12   Circuit Court      <- lower court, present
+IESCDET 46 Supreme determinations
+```
+
+## Reaching the full archive — implemented via Playwright
+
+The by-year browse pages `/judgments-year` and `/determinations-year` expose a
+year `<select>` (2001–present) that drives the Drupal AJAX form. The
+`collectors/judgmentsArchive.ts` collector drives this in a headless browser:
+pick each year, let the AJAX render, scrape the `/acc/alfresco/...pdf` results,
+page through, checkpoint per year. Run:
+
+```bash
+npm install && npx playwright install chromium
+npx tsx crawler/index.ts judgments-archive            # full judgments archive
+npx tsx crawler/index.ts determinations-archive       # full determinations
+npx tsx crawler/index.ts download judgments-archive   # then fetch the PDFs
+```
+
+Flags: `--from`/`--to` (year range), `--headed` (watch the browser), `--debug`
+(dump a screenshot + HTML per year to `data/debug/` to recalibrate selectors).
+
+Selectors are server-rendered Drupal hooks (`#search-year`, `.alfresco-table`,
+`/acc/alfresco/...pdf`); if the markup shifts, `--debug` shows you what changed.
+Alternatives if you'd rather not run a browser: reverse-engineer the AJAX call
+the form fires (Network tab), or use an external aggregator (BAILII / vLex) for
+historical Irish judgments where licence terms permit.
 
 ## Politeness / legal
 

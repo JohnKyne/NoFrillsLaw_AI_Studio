@@ -50,6 +50,10 @@ export const ENDPOINTS = {
   judgmentsList: 'https://www2.courts.ie/Judgments',
   // Supreme Court "determinations" (leave-to-appeal). 0-based pagination.
   determinationsList: 'https://www2.courts.ie/determinations',
+  // "By year" browse pages — the AJAX-gated entry to the FULL archive
+  // (driven via Playwright; a plain HTTP POST 302s to the homepage).
+  judgmentsByYear: 'https://www2.courts.ie/judgments-year',
+  determinationsByYear: 'https://www2.courts.ie/determinations-year',
   // High Court Search (Sitefinity). Loading this GET seeds ASP.NET_SessionId.
   hcsPage: 'https://courts.ie/high-court-search',
   // List endpoint (JSON). POST, form-encoded. Pagination is 1-based.
@@ -89,3 +93,6 @@ export const HCS_PROCEEDING_CODES = [
 
 /** Earliest year to attempt when sweeping the full High Court DB. */
 export const HCS_MIN_YEAR = 1980;
+
+/** Earliest year offered by the judgments/determinations "by year" browse. */
+export const ARCHIVE_MIN_YEAR = 2001;
