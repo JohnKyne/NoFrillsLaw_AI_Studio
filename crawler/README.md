@@ -21,7 +21,7 @@ crawler/
     jsonl.ts                append-only JSONL writer
   collectors/
     pdfListing.ts           judgments + determinations recent listing (links)
-    judgmentsArchive.ts     FULL archive via headless browser (Playwright)
+    judgmentsArchive.ts     FULL archive via the by-year Solr GET (plain HTTP)
     download.ts             pull the actual PDFs for a crawled corpus (b)
     highCourt.ts            High Court two-step (list -> detail) + segmenter (a)
     probate.ts              probate single-step (GET form -> cards)
@@ -30,11 +30,12 @@ crawler/
   data/                     output (gitignored): *.jsonl, pdfs/, debug/, .cursors/
 ```
 
-> **Read `COVERAGE.md` first.** High Court records and probate are fully
-> coverable over plain HTTP; the full judgment/determination *archives* are
-> reachable only via the Playwright `*-archive` collectors (the browse listings
-> are capped and the search is AJAX-gated). The only true gap is *structured
-> case records* for non-High-Court tiers, which don't exist publicly.
+> **Read `COVERAGE.md` first.** Everything coverable here — High Court records,
+> probate, and the full judgment/determination *archives* — is reachable over
+> plain HTTP. (The browse listings are capped, but the by-year search redirects
+> to an unauthenticated Solr GET endpoint the `*-archive` collectors use; no
+> browser needed.) The only true gap is *structured case records* for
+> non-High-Court tiers, which aren't published online at all.
 
 ## What each collector covers
 
@@ -42,26 +43,27 @@ crawler/
 |---|---|---|---|
 | `judgments` | `www2.courts.ie/Judgments` | `judgments.jsonl` | ⚠️ **Recent window only** (~196). Use `judgments-archive` for the full set. |
 | `determinations` | `www2.courts.ie/determinations` | `determinations.jsonl` | ⚠️ Recent window only (~24). |
-| `judgments-archive` | `www2.courts.ie/judgments-year` (Playwright) | `judgments-archive.jsonl` | ✅ **Full archive**, all courts, by year 2001–present. Needs Playwright. |
-| `determinations-archive` | `www2.courts.ie/determinations-year` (Playwright) | `determinations-archive.jsonl` | ✅ Full determinations archive. |
+| `judgments-archive` | `ww2.courts.ie/search/judgments-year` (Solr GET) | `judgments-archive.jsonl` | ✅ **Full archive**, all courts, by year 2001–present. Plain HTTP. |
+| `determinations-archive` | `ww2.courts.ie/search/determinations-year` (Solr GET) | `determinations-archive.jsonl` | ✅ Full determinations archive. |
 | `download <corpus>` | the JSONL above | `pdfs/<court>/<citation>.pdf`, `<corpus>-downloads.jsonl` | Downloads PDFs for a captured corpus. Resumable. |
 | `high-court` | `courts.ie/high-court-search` | `high-court-list.jsonl`, `high-court-detail.jsonl` | ✅ Full (year sweep; paging uncapped, verified to 25k). 1-based paging; `page=0` = count only. |
 | `probate` | `www.courts.ie/app/probate-register` | `probate.jsonl` | ✅ Full by year of death (empty-lastname + year = all grants for that year). |
 
-### Archive collector (Playwright)
+### Archive collector (plain HTTP)
 
-The browse listings are capped to recent uploads; the full archive is exposed
-only through the by-year pages, whose year `<select>` drives a Drupal AJAX form
-that no plain HTTP request can trigger (POST 302s home; `/system/ajax` returns
-empty — see COVERAGE.md). `judgmentsArchive.ts` drives it in a real browser.
+The browse listings are capped to recent uploads. The by-year search redirects
+to an unauthenticated Solr GET endpoint
+(`ww2.courts.ie/search/{judgments|determinations}-year/<query>?page=N`) that
+`judgmentsArchive.ts` pages directly — no browser, token, or cookie. Verified:
+2015 ≈ 1,234 judgments across 14 pages; all courts incl. District/IEDC.
 
 ```bash
-npm install && npx playwright install chromium
 npx tsx crawler/index.ts judgments-archive --from 2001 --to 2026
-npx tsx crawler/index.ts judgments-archive --debug   # dump screenshots+HTML/year
+npx tsx crawler/index.ts determinations-archive
 npx tsx crawler/index.ts download judgments-archive  # then fetch the PDFs
 ```
-Flags: `--from`/`--to`, `--headed` (watch it run), `--debug` (calibrate selectors).
+Flags: `--from`/`--to` (year range). Playwright is a dev dependency used only to
+*discover* this endpoint; it is not needed to run any collector.
 
 ## The two-step (High Court only)
 

@@ -35,6 +35,7 @@ export const DEFAULT_CONFIG: CrawlerConfig = {
   hostDelayMs: {
     'www.courts.ie': 10_000,
     'www2.courts.ie': 10_000,
+    'ww2.courts.ie': 10_000, // the by-year Solr search redirects here
     'courts.ie': 10_000,
   },
   defaultDelayMs: 10_000,
@@ -50,10 +51,10 @@ export const ENDPOINTS = {
   judgmentsList: 'https://www2.courts.ie/Judgments',
   // Supreme Court "determinations" (leave-to-appeal). 0-based pagination.
   determinationsList: 'https://www2.courts.ie/determinations',
-  // "By year" browse pages — the AJAX-gated entry to the FULL archive
-  // (driven via Playwright; a plain HTTP POST 302s to the homepage).
-  judgmentsByYear: 'https://www2.courts.ie/judgments-year',
-  determinationsByYear: 'https://www2.courts.ie/determinations-year',
+  // FULL archive — the by-year search 302-redirects to this plain GET Solr
+  // endpoint (no browser/token needed). The collector builds the per-year,
+  // per-page URL: /search/{judgments|determinations}-year/<solr query>?page=N
+  archiveSearchBase: 'https://ww2.courts.ie/search',
   // High Court Search (Sitefinity). Loading this GET seeds ASP.NET_SessionId.
   hcsPage: 'https://courts.ie/high-court-search',
   // List endpoint (JSON). POST, form-encoded. Pagination is 1-based.

@@ -5,8 +5,8 @@
  *
  *   judgments                        recent judgments listing (capped window)
  *   determinations                   recent determinations listing (capped)
- *   judgments-archive [--from Y]     FULL judgment archive via headless browser
- *     [--to Y] [--headed] [--debug]  (needs Playwright; drives the by-year form)
+ *   judgments-archive [--from Y]     FULL judgment archive (plain HTTP; the
+ *     [--to Y]                       by-year Solr GET endpoint, no browser)
  *   determinations-archive ...       FULL determinations archive (same engine)
  *   download <judgments|determinations|*-archive>  pull the PDFs (b)
  *   high-court [--from Y] [--to Y]    two-step High Court records (segmented)
@@ -82,19 +82,19 @@ async function main() {
 
     case 'judgments-archive':
       await collectArchive({
-        cfg, name: 'judgments-archive', browseUrl: ENDPOINTS.judgmentsByYear,
+        http, cfg, name: 'judgments-archive',
+        searchPath: 'judgments-year', typeValue: 'Judgment',
         fromYear: flags.from ? Number(flags.from) : ARCHIVE_MIN_YEAR,
         toYear: flags.to ? Number(flags.to) : thisYear,
-        headless: !flags.headed, debug: Boolean(flags.debug),
       });
       break;
 
     case 'determinations-archive':
       await collectArchive({
-        cfg, name: 'determinations-archive', browseUrl: ENDPOINTS.determinationsByYear,
+        http, cfg, name: 'determinations-archive',
+        searchPath: 'determinations-year', typeValue: 'Determination',
         fromYear: flags.from ? Number(flags.from) : ARCHIVE_MIN_YEAR,
         toYear: flags.to ? Number(flags.to) : thisYear,
-        headless: !flags.headed, debug: Boolean(flags.debug),
       });
       break;
 

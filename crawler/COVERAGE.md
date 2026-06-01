@@ -9,16 +9,19 @@ before assuming "full coverage".
 |---|---|---|
 | **High Court case records** | ✅ Yes | Year sweep; paging is uncapped below each query's total (verified to 25k). |
 | **Probate grants** | ✅ Yes (by year of death) | Empty-lastname + year returns every grant for that year. |
-| **Judgments (full-text archive)** | ✅ Yes — via Playwright | Browse listing is capped, but the `judgments-archive` collector drives the by-year form in a headless browser to reach the full archive. |
-| **Determinations (full-text archive)** | ✅ Yes — via Playwright | Same engine against `/determinations-year`. |
-| Circuit / District / CoA / Supreme **judgments** | ✅ In the archive | The by-year archive spans all courts; CoA (IECA), Supreme (IESC) and Circuit (IECC) judgments are confirmed present. |
-| Circuit / District / CoA / Supreme **case records** | ❌ N/A | No such public searchable dataset exists — only the High Court has structured case records. |
+| **Judgments (full-text archive)** | ✅ Yes — **plain HTTP** | The by-year search redirects to an unauthenticated Solr GET endpoint; `judgments-archive` pages it. No browser needed. |
+| **Determinations (full-text archive)** | ✅ Yes — **plain HTTP** | Same endpoint with ` type:Determination`. |
+| Circuit / District / CoA / Supreme **judgments** | ✅ In the archive | The by-year archive spans all courts — confirmed present: IEHC, IECA (CoA), IESC (Supreme), IECC (Circuit), **IEDC (District)**, **IECCA (Court of Criminal Appeal)**. |
+| Circuit / District / CoA / Supreme **case records** | ❌ Not public | No public searchable dataset exists — only the High Court has structured case records (confirmed by research, below). |
 
-So: **case records (High Court) + probate are complete via plain HTTP; the full
-judgment/determination archives are reachable but require the Playwright
-collector** (`judgments-archive` / `determinations-archive`). The only true gap
-is *structured case records* for the non-High-Court tiers, which simply don't
-exist publicly.
+So: **everything coverable here is reachable over plain HTTP** — High Court
+records, probate, and the full judgment/determination archives. The only true
+gap is *structured case records* for the non-High-Court tiers, which are not
+published online at all.
+
+> Playwright (a dev dependency) was used only to **discover** the archive
+> endpoint; it is **not needed at runtime**. You can skip
+> `npx playwright install` unless you want the browser as a fallback.
 
 ## Evidence
 
@@ -58,12 +61,11 @@ returns ~24 on page 0, then nothing. Things that DON'T work (all tested):
   in the server cache; the page is edge-cached so anonymous build_ids aren't stored).
 - Direct Alfresco REST (`/acc/alfresco/api/.../search`, `/service/...`, CMIS) — 404.
 
-The vowel/`*` "return everything" trick can't even be applied: the keyword field
-is only reachable once the page's JS fires the AJAX call. So the archive is
-genuinely **JS/AJAX-gated**.
+The vowel/`*` "return everything" trick can't be applied to the *listing*: the
+keyword field is only live once the page JS fires. But driving the by-year form
+in a browser (Playwright, discovery only) revealed the **real shortcut** below.
 
-**Court census of the browsable listing** (asc+desc, pages 0–1) — confirms lower
-courts are present as judgments:
+**Court census of the browsable listing** (asc+desc, pages 0–1):
 
 ```
 IEHC 548   High Court
@@ -73,29 +75,61 @@ IECC  12   Circuit Court      <- lower court, present
 IESCDET 46 Supreme determinations
 ```
 
-## Reaching the full archive — implemented via Playwright
+## The shortcut — full archive over plain HTTP (no browser)
 
-The by-year browse pages `/judgments-year` and `/determinations-year` expose a
-year `<select>` (2001–present) that drives the Drupal AJAX form. The
-`collectors/judgmentsArchive.ts` collector drives this in a headless browser:
-pick each year, let the AJAX render, scrape the `/acc/alfresco/...pdf` results,
-page through, checkpoint per year. Run:
+Driving `/judgments-year` in a browser showed its form does **not** stay on an
+AJAX call — it POSTs and **302-redirects to an unauthenticated GET endpoint**
+backed by Solr:
+
+```
+GET https://ww2.courts.ie/search/judgments-year/<SOLR_QUERY>?page=<N>
+SOLR_QUERY = " type:Judgment" AND "filter:alfresco_year.true"
+                               AND "filter:alfresco_todate.<YEAR>"
+```
+
+Determinations use `/search/determinations-year/` + ` type:Determination`.
+Verified by direct `curl` (no cookie, token, or browser):
+
+- `page` is 0-based, ~95–100 results/page, **pages are distinct**, and a year
+  ends on the first empty page.
+- 2015 = pages 0–13 ≈ **1,234 judgments** (vs ~196 from the capped listing).
+- Returns **all courts**, including IEDC (District) and IECCA (Court of Criminal
+  Appeal). Smoke test: determinations 2024 → **164** records (listing showed ~24).
+
+`collectors/judgmentsArchive.ts` implements exactly this — pure HTTP, rate-
+limited, resumable per (year, page):
 
 ```bash
-npm install && npx playwright install chromium
 npx tsx crawler/index.ts judgments-archive            # full judgments archive
 npx tsx crawler/index.ts determinations-archive       # full determinations
 npx tsx crawler/index.ts download judgments-archive   # then fetch the PDFs
 ```
 
-Flags: `--from`/`--to` (year range), `--headed` (watch the browser), `--debug`
-(dump a screenshot + HTML per year to `data/debug/` to recalibrate selectors).
+Flags: `--from`/`--to` (year range). No `npm playwright install` required.
+Other things checked for shortcuts and ruled out: the listing's `page` cap, a
+sitemap of judgments (none), and a direct Alfresco REST API (404).
 
-Selectors are server-rendered Drupal hooks (`#search-year`, `.alfresco-table`,
-`/acc/alfresco/...pdf`); if the markup shifts, `--debug` shows you what changed.
-Alternatives if you'd rather not run a browser: reverse-engineer the AJAX call
-the form fires (Network tab), or use an external aggregator (BAILII / vLex) for
-historical Irish judgments where licence terms permit.
+## Case records for other courts — researched, confirmed absent
+
+Online research confirms only the **High Court** publishes a searchable
+case-record system; CoA / Supreme / Circuit / District do **not**:
+
+- Case *law* (judgments) on courts.ie covers Supreme (2001+), High Court &
+  Court of Criminal Appeal (2004+), Court of Appeal (2014+) — i.e. the archive
+  above. Circuit/District seldom publish written judgments.
+- Access to actual *court records* (files, pleadings, orders) for any court is,
+  outside FOI, reserved to the parties / their legal reps; a non-party must
+  apply to the relevant Court Office for a judge's decision — there is no public
+  online register.
+- The **Legal Diary** (legaldiary.courts.ie / CSOL) lists scheduled cases for
+  Supreme, CoA, High, Central Criminal and Circuit courts — but that is a
+  *calendar*, not a records database.
+- Historical Circuit/District files sit with the **National Archives** (offline,
+  by visit; family-law files closed to the public).
+
+Sources: courts.ie/access-court-records, gov.ie "Access Court Judgments and
+Determinations", National Archives court-records collections, IRLII case-search,
+European e-Justice Portal (national case law, IE).
 
 ## Politeness / legal
 

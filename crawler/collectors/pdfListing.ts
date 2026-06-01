@@ -7,12 +7,10 @@
  * -------------------------
  * The public browse listing is CAPPED to the most-recent uploads, NOT the full
  * historical corpus (verified: Judgments exposes ~196 PDFs over pages 0-1 then
- * nothing; Determinations ~24 on page 0). The complete archive lives behind an
- * Alfresco-backed AJAX search form (`alfresco_*` fields + date range) which a
- * plain POST cannot drive — it 302-redirects to the homepage. Fully covering
- * the judgment archive therefore needs the Alfresco search endpoint reverse-
- * engineered or a headless browser (see COVERAGE.md). This collector reliably
- * captures the recent window only.
+ * nothing; Determinations ~24 on page 0). For the COMPLETE archive use the
+ * `judgments-archive` / `determinations-archive` collectors, which page the
+ * by-year Solr GET endpoint (plain HTTP — see judgmentsArchive.ts / COVERAGE.md).
+ * This listing collector reliably captures the recent window only.
  *
  * Mechanics: PDFs render as <a href="/acc/alfresco/<uuid>/<file>.pdf">. We page
  * a 0-based `?page=N` and stop when a page yields no *new* judgment documents.
