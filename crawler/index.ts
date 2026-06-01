@@ -1,28 +1,33 @@
 /**
  * courts.ie crawler — CLI entry point.
  *
- * Usage (run with the project's tsx, e.g. `npx tsx crawler/index.ts <cmd>`):
+ * Run with the project's tsx, e.g. `npx tsx crawler/index.ts <cmd>`:
  *
- *   judgments                       crawl the full-text judgments corpus
- *   determinations                  crawl the Supreme Court determinations
- *   high-court [--from Y] [--to Y]   two-step High Court records
- *              [--no-details]        list only (skip step 2)
- *   probate    [--years a,b]         probate grants (enumerated)
- *              [--lastnames a,b,c]
+ *   judgments                        recent judgments listing (capped window)
+ *   determinations                   recent determinations listing (capped)
+ *   download <judgments|determinations>   pull the PDFs for a crawled corpus (b)
+ *   high-court [--from Y] [--to Y]    two-step High Court records (segmented)
+ *              [--no-details]         list only (skip step 2)
+ *   probate    [--years a,b,..]       probate grants — full year sweep
+ *              [--lastnames a,b]      optional surname filter instead
  *   all                              run every collector sequentially
  *
  * Global flags:
- *   --delay <ms>   override per-host crawl delay (default 10000, polite)
+ *   --delay <ms>   per-host crawl delay (default 10000, polite)
  *   --out <dir>    output directory (default ./crawler/data)
  *
  * State is checkpointed per collector under <out>/.cursors, so re-running a
- * command resumes where it left off. Output is JSONL under <out>/.
+ * command resumes. Nothing runs on import — you must invoke a command.
  *
- * NB: nothing here runs on import — you must invoke a command.
+ * COVERAGE: see crawler/COVERAGE.md. Short version — High Court records and
+ * probate grants are fully coverable; the judgment/determination *archives*
+ * are not (the browse listings are capped; the full corpus is behind an
+ * Alfresco AJAX search this CLI does not yet drive).
  */
-import { DEFAULT_CONFIG, ENDPOINTS, type CrawlerConfig } from './config.js';
+import { DEFAULT_CONFIG, ENDPOINTS, HCS_MIN_YEAR, type CrawlerConfig } from './config.js';
 import { HttpClient } from './lib/http.js';
 import { collectPdfListing } from './collectors/pdfListing.js';
+import { collectDownloads } from './collectors/download.js';
 import { collectHighCourt } from './collectors/highCourt.js';
 import { collectProbate } from './collectors/probate.js';
 
@@ -34,15 +39,9 @@ function parseArgs(argv: string[]) {
     if (a.startsWith('--')) {
       const key = a.slice(2);
       const next = argv[i + 1];
-      if (next && !next.startsWith('--')) {
-        flags[key] = next;
-        i++;
-      } else {
-        flags[key] = true;
-      }
-    } else {
-      positional.push(a);
-    }
+      if (next && !next.startsWith('--')) { flags[key] = next; i++; }
+      else flags[key] = true;
+    } else positional.push(a);
   }
   return { flags, positional };
 }
@@ -63,24 +62,32 @@ async function main() {
 
   const http = new HttpClient(cfg);
   const thisYear = new Date().getFullYear();
+  const yearRange = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => to - i);
 
   switch (cmd) {
     case 'judgments':
-      await collectPdfListing({
-        http, cfg, name: 'judgments', listUrl: ENDPOINTS.judgmentsList,
-      });
+      await collectPdfListing({ http, cfg, name: 'judgments', listUrl: ENDPOINTS.judgmentsList });
       break;
 
     case 'determinations':
-      await collectPdfListing({
-        http, cfg, name: 'determinations', listUrl: ENDPOINTS.determinationsList,
-      });
+      await collectPdfListing({ http, cfg, name: 'determinations', listUrl: ENDPOINTS.determinationsList });
       break;
+
+    case 'download': {
+      const source = positional[1];
+      if (source !== 'judgments' && source !== 'determinations') {
+        console.error('Usage: download <judgments|determinations>');
+        process.exit(1);
+      }
+      await collectDownloads({ http, cfg, source });
+      break;
+    }
 
     case 'high-court':
       await collectHighCourt({
         http, cfg,
-        fromYear: flags.from ? Number(flags.from) : 2000,
+        fromYear: flags.from ? Number(flags.from) : HCS_MIN_YEAR,
         toYear: flags.to ? Number(flags.to) : thisYear,
         withDetails: !flags['no-details'],
       });
@@ -89,28 +96,22 @@ async function main() {
     case 'probate': {
       const years = flags.years
         ? String(flags.years).split(',').map(Number)
-        : Array.from({ length: 5 }, (_, i) => thisYear - i);
-      const lastnames = flags.lastnames
-        ? String(flags.lastnames).split(',')
-        : 'abcdefghijklmnopqrstuvwxyz'.split(''); // prefix sweep
-      await collectProbate({ http, cfg, lastnames, years });
+        : yearRange(thisYear - 30, thisYear); // wide default sweep
+      const lastnames = flags.lastnames ? String(flags.lastnames).split(',') : undefined;
+      await collectProbate({ http, cfg, years, lastnames });
       break;
     }
 
     case 'all':
       await collectPdfListing({ http, cfg, name: 'judgments', listUrl: ENDPOINTS.judgmentsList });
       await collectPdfListing({ http, cfg, name: 'determinations', listUrl: ENDPOINTS.determinationsList });
-      await collectHighCourt({ http, cfg, fromYear: 2000, toYear: thisYear });
-      await collectProbate({
-        http, cfg,
-        lastnames: 'abcdefghijklmnopqrstuvwxyz'.split(''),
-        years: Array.from({ length: 5 }, (_, i) => thisYear - i),
-      });
+      await collectHighCourt({ http, cfg, fromYear: HCS_MIN_YEAR, toYear: thisYear });
+      await collectProbate({ http, cfg, years: yearRange(thisYear - 30, thisYear) });
       break;
 
     default:
       console.error(
-        'Unknown command. Use one of: judgments | determinations | ' +
+        'Unknown command. Use: judgments | determinations | download | ' +
           'high-court | probate | all\nSee crawler/README.md for flags.',
       );
       process.exit(1);

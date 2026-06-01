@@ -20,20 +20,28 @@ crawler/
     cursor.ts               resumable JSON checkpoints
     jsonl.ts                append-only JSONL writer
   collectors/
-    pdfListing.ts           judgments + determinations (PDF harvest)
-    highCourt.ts            High Court two-step (list -> detail)
+    pdfListing.ts           judgments + determinations (PDF-link harvest)
+    download.ts             pull the actual PDFs for a crawled corpus (b)
+    highCourt.ts            High Court two-step (list -> detail) + segmenter (a)
     probate.ts              probate single-step (GET form -> cards)
-  data/                     output (gitignored): *.jsonl + .cursors/
+  lib/fetchFile.ts          streaming, resumable file downloader
+  data/                     output (gitignored): *.jsonl, pdfs/, .cursors/
 ```
+
+> **Read `COVERAGE.md` first.** High Court records and probate are fully
+> coverable; the judgment/determination *archives* are **not** (browse listings
+> are capped — the full corpus sits behind an Alfresco AJAX search this CLI
+> doesn't yet drive).
 
 ## What each collector covers
 
-| Command | Source | Output | Notes |
+| Command | Source | Output | Coverage |
 |---|---|---|---|
-| `judgments` | `www2.courts.ie/Judgments` | `judgments.jsonl` | Full-text PDFs, all courts that publish (mostly IEHC/IECA/IESC). 0-based paging. |
-| `determinations` | `www2.courts.ie/determinations` | `determinations.jsonl` | Supreme Court `IESCDET` PDFs. |
-| `high-court` | `courts.ie/high-court-search` | `high-court-list.jsonl`, `high-court-detail.jsonl` | Two-step; ~508k records. 1-based paging; `page=0` returns count only. |
-| `probate` | `www.courts.ie/app/probate-register` | `probate.jsonl` | Single-step GET form; enumerated by (lastname × year). |
+| `judgments` | `www2.courts.ie/Judgments` | `judgments.jsonl` | ⚠️ **Recent window only** (~196). Full archive needs the Alfresco search — see COVERAGE.md. |
+| `determinations` | `www2.courts.ie/determinations` | `determinations.jsonl` | ⚠️ Recent window only (~24). |
+| `download <corpus>` | the JSONL above | `pdfs/<court>/<citation>.pdf`, `<corpus>-downloads.jsonl` | Downloads PDFs for whatever the listing captured. Resumable. |
+| `high-court` | `courts.ie/high-court-search` | `high-court-list.jsonl`, `high-court-detail.jsonl` | ✅ Full (year sweep; paging uncapped, verified to 25k). 1-based paging; `page=0` = count only. |
+| `probate` | `www.courts.ie/app/probate-register` | `probate.jsonl` | ✅ Full by year of death (empty-lastname + year = all grants for that year). |
 
 ## The two-step (High Court only)
 
@@ -54,11 +62,13 @@ once. Quirks encoded in `collectors/highCourt.ts`:
 ## Usage
 
 ```bash
-npx tsx crawler/index.ts judgments
+npx tsx crawler/index.ts judgments                        # recent window
+npx tsx crawler/index.ts download judgments               # then pull the PDFs (b)
 npx tsx crawler/index.ts determinations
-npx tsx crawler/index.ts high-court --from 2015 --to 2024
-npx tsx crawler/index.ts high-court --no-details          # list only
-npx tsx crawler/index.ts probate --years 2020,2021 --lastnames murphy,kelly
+npx tsx crawler/index.ts high-court --from 2015 --to 2024 # two-step, segmented (a)
+npx tsx crawler/index.ts high-court --no-details          # list only (fast)
+npx tsx crawler/index.ts probate --years 2020,2021        # full year sweep
+npx tsx crawler/index.ts probate --lastnames murphy,kelly --years 2020
 npx tsx crawler/index.ts all
 
 # global flags

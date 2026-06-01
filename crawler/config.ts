@@ -63,3 +63,29 @@ export const ENDPOINTS = {
 
 /** Result rows per page returned by the HCS DataTable. */
 export const HCS_PAGE_SIZE = 25;
+
+/**
+ * Safety threshold for the recursive segmenter. Empirically HCS paging is NOT
+ * capped below a query's `total` (verified by walking a 25,288-record year to
+ * its last page), and no single year exceeds ~25k. So a year query is always
+ * fully pageable. This threshold only triggers sub-segmentation for unusually
+ * large partitions (e.g. an all-years query); set generously above any real
+ * per-year total but below any plausible server cap.
+ */
+export const HCS_SEGMENT_THRESHOLD = 40_000;
+
+/**
+ * `proceeding` (case-type) codes from the search form's dropdown — the axis
+ * used to sub-segment a partition that exceeds the threshold. NOTE: case
+ * *number* is an exact-match field, not a range, so it cannot bucket records;
+ * proceeding is the correct splitting axis. A handful of rare proceeding types
+ * have no code (value="") and cannot be isolated — they are still captured by
+ * the unsegmented year pass whenever that year is under the threshold.
+ */
+export const HCS_PROCEEDING_CODES = [
+  'CAT', 'CA', 'CCA', 'CLA', 'COS', 'CIR', 'EEO', 'EXT', 'FJ', 'FTE', 'IA',
+  'JR', 'MCA', 'PEP', 'PAP', 'PIR', 'P', 'SSP', 'JRP', 'PR', 'R',
+] as const;
+
+/** Earliest year to attempt when sweeping the full High Court DB. */
+export const HCS_MIN_YEAR = 1980;

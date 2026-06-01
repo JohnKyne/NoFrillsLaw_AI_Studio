@@ -1,13 +1,16 @@
 /**
- * Probate Register — single-step collector.
+ * Probate Register — single-step collector with full-coverage year sweep.
  *
- * It's a server-rendered GET form (no JSON API). Every field is on the results
- * card itself, so there is no drill-in. We must supply search criteria — there
- * is no "list all" — so we enumerate by (lastname-prefix x year). Tune the
- * prefix/year ranges in index.ts for your coverage needs.
+ * It's a server-rendered GET form (no JSON API); every field is on the results
+ * card, so there is no drill-in. Crucially, an EMPTY `lastname` with a `year`
+ * returns *every* grant for that year-of-death (verified: 16,796 for 2020), so
+ * we enumerate by year alone for complete coverage — no surname guessing.
  *
- *   GET /app/probate-register?firstname=&lastname=<x>&year=<yyyy>&page=<n>
+ *   GET /app/probate-register?firstname=&lastname=&year=<yyyy>&page=<n>
  *   (page is 1-based; ~10 grants/page; header reads "Grants found: N").
+ *
+ * Records with a blank/unknown year-of-death won't surface in a year sweep;
+ * pass an explicit `lastname` job set if you need to chase those separately.
  */
 import { HttpClient } from '../lib/http.js';
 import { JsonlWriter } from '../lib/jsonl.js';
@@ -15,7 +18,6 @@ import { Cursor } from '../lib/cursor.js';
 import { ENDPOINTS, type CrawlerConfig } from '../config.js';
 import type { ProbateRecord } from '../types.js';
 
-/** Strip tags and collapse whitespace/entities to plain text. */
 function clean(html: string): string {
   return html
     .replace(/<[^>]+>/g, ' ')
@@ -32,24 +34,16 @@ function parseTotal(html: string): number {
 }
 
 /**
- * Parse the `.probate-grants-entity` cards. The markup is class-driven, so we
- * slice on the entity class and pull labelled fields out of each block.
- * NOTE: regex parsing is intentionally dependency-free but brittle — swap in a
- * real HTML parser (e.g. node-html-parser) if the markup shifts.
+ * Parse `.probate-grants-entity` cards. Regex-based and dependency-free but
+ * brittle — swap in a real HTML parser if the markup shifts.
  */
-function parseGrants(
-  html: string,
-  query: ProbateRecord['query'],
-): ProbateRecord[] {
+function parseGrants(html: string, query: ProbateRecord['query']): ProbateRecord[] {
   const blocks = html.split(/class="[^"]*probate-grants-entity\b/).slice(1);
   const out: ProbateRecord[] = [];
   for (const block of blocks) {
     const text = clean(block.slice(0, 1500));
     const field = (label: string) =>
-      text.match(new RegExp(`${label}:?\\s*([^·]+?)(?:\\s{2,}|·|$)`, 'i'))?.[1]?.trim() ??
-      null;
-
-    // Title line: "<Name>  ·  <dd/mm/yyyy>  <GrantType>"
+      text.match(new RegExp(`${label}:?\\s*([^·]+?)(?:\\s{2,}|·|$)`, 'i'))?.[1]?.trim() ?? null;
     const head = text.match(/^(.+?)\s*·\s*(\d{2}\/\d{2}\/\d{4})\s*(\w+)?/);
     const granteesRaw = field('Grantees');
     out.push({
@@ -70,7 +64,6 @@ function parseGrants(
 }
 
 interface ProbateCursorState {
-  /** Pending (lastname, year) jobs; head is in-progress. */
   jobs: Array<{ lastname: string; year: string }>;
   nextPage: number;
   totalGrants: number;
@@ -80,23 +73,21 @@ interface ProbateCursorState {
 export async function collectProbate(opts: {
   http: HttpClient;
   cfg: CrawlerConfig;
-  /** Last-name seeds to enumerate (e.g. 'a'..'z' prefixes or full surnames). */
-  lastnames: string[];
-  /** Years of death to sweep. */
+  /** Years of death to sweep (empty lastname -> all grants for the year). */
   years: number[];
+  /** Optional surnames; if given, jobs become (lastname × year) instead. */
+  lastnames?: string[];
 }): Promise<void> {
   const { http, cfg } = opts;
   const cursor = new Cursor<ProbateCursorState>(cfg.outDir, 'probate');
   const writer = new JsonlWriter(`${cfg.outDir}/probate.jsonl`);
 
-  const seedJobs = opts.lastnames.flatMap((lastname) =>
+  const surnames = opts.lastnames && opts.lastnames.length ? opts.lastnames : [''];
+  const seedJobs = surnames.flatMap((lastname) =>
     opts.years.map((y) => ({ lastname, year: String(y) })),
   );
   const state = await cursor.load({
-    jobs: seedJobs,
-    nextPage: 1,
-    totalGrants: 0,
-    done: false,
+    jobs: seedJobs, nextPage: 1, totalGrants: 0, done: false,
   });
   if (state.done) {
     console.log(`[probate] already complete (${state.totalGrants} grants).`);
@@ -122,10 +113,10 @@ export async function collectProbate(opts: {
       state.totalGrants += grants.length;
       state.nextPage += 1;
       await cursor.save(state);
+      const tag = lastname ? `${lastname}/${year}` : `${year}`;
       console.log(
-        `[probate] ${lastname}/${year} page ${state.nextPage - 1}: ` +
-          `+${grants.length} (total ${state.totalGrants}, ` +
-          `found=${parseTotal(html)})`,
+        `[probate] ${tag} page ${state.nextPage - 1}: +${grants.length} ` +
+          `(total ${state.totalGrants}, found=${parseTotal(html)})`,
       );
     }
     state.done = true;
