@@ -135,6 +135,8 @@ async function main() {
       await collectIrishReports({
         http, cfg,
         mode: (flags.mode ? String(flags.mode) : 'metadata') as IrishReportsMode,
+        fromYear: flags.from ? Number(flags.from) : undefined,
+        toYear: flags.to ? Number(flags.to) : undefined,
       });
       break;
 

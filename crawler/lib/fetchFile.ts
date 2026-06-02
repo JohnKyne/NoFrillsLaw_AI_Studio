@@ -30,7 +30,16 @@ export async function downloadFile(
     }
     await mkdir(path.dirname(dest), { recursive: true });
 
-    const res = await http.raw(url);
+    // http.raw uses redirect:'manual' (to surface HCS error redirects), but a
+    // file download should follow them (e.g. archive.org 302s to a delivery node).
+    let res = await http.raw(url);
+    let current = url;
+    for (let hop = 0; hop < 5 && [301, 302, 303, 307, 308].includes(res.status); hop++) {
+      const loc = res.headers.get('location');
+      if (!loc) break;
+      current = new URL(loc, current).toString();
+      res = await http.raw(current);
+    }
     if (res.status >= 300 || !res.body) {
       return { url, dest, status: 'failed', error: `HTTP ${res.status}` };
     }

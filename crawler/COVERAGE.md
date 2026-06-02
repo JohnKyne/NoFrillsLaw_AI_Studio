@@ -139,6 +139,15 @@ case-record system; CoA / Supreme / Circuit / District do **not**:
   case index from each volume's "Table of Cases Reported". BAILII does *not*
   carry the `[IR]` citation for its own cases (verified: 0/12 in a sample) — only
   neutral citations — so it can't supply the neutral↔`[IR]` mapping.
+  - *1925 is a digitisation edge, not a copyright line.* The IA batch simply
+    stops at 1925; no 1926+ Irish Reports are scanned anywhere findable. The
+    public-domain frontier is later and **rolling**: under US law (archive.org's
+    jurisdiction) everything published ≥95 years ago is PD, i.e. **through 1930
+    as of 2026**, advancing one year each 1 January. So 1926–1930 is already
+    PD-eligible and just un-scanned; the bottleneck is digitisation, not
+    copyright. (In EU/IE terms the judgment text is effectively free, but
+    editorial headnotes run life-of-reporter + 70, so US publication-date PD is
+    the cleaner basis these are hosted on.)
 - **IRLII** (irlii.org, UCC) is a *front-end over BAILII* — its case links point
   straight at bailii.org; no distinct judgment corpus (its unique content is
   journal-article indexing). For judgments, BAILII is the source.

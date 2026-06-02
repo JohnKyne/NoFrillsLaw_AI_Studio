@@ -148,20 +148,27 @@ export async function collectIrishReports(opts: {
   http: HttpClient;
   cfg: CrawlerConfig;
   mode?: IrishReportsMode;
+  fromYear?: number;
+  toYear?: number;
 }): Promise<void> {
   const { http, cfg } = opts;
   const mode = opts.mode ?? 'metadata';
   const dir = path.join(cfg.outDir, 'irish-reports');
   const manifest = new JsonlWriter(path.join(dir, 'manifest.jsonl'));
 
-  const volumes = await enumerateVolumes(http);
-  console.log(`[irish-reports] enumerated ${volumes.length} volumes (${volumes[0]?.year}–${volumes.at(-1)?.year}).`);
+  const allVolumes = await enumerateVolumes(http);
+  console.log(`[irish-reports] enumerated ${allVolumes.length} volumes (${allVolumes[0]?.year}–${allVolumes.at(-1)?.year}).`);
   try {
-    for (const v of volumes) await manifest.write(v);
+    for (const v of allVolumes) await manifest.write(v);
   } finally {
     await manifest.close();
   }
   console.log(`[irish-reports] manifest written: ${path.join(dir, 'manifest.jsonl')}`);
+
+  // Optional year window for the (heavy) download/parse pass.
+  const from = opts.fromYear ?? -Infinity;
+  const to = opts.toYear ?? Infinity;
+  const volumes = allVolumes.filter((v) => v.year >= from && v.year <= to);
 
   if (mode === 'metadata') {
     console.log('[irish-reports] metadata-only mode — no volume downloads. ' +
