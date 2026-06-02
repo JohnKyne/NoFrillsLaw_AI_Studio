@@ -38,6 +38,7 @@ export const DEFAULT_CONFIG: CrawlerConfig = {
     'ww2.courts.ie': 10_000, // the by-year Solr search redirects here
     'legaldiary.courts.ie': 10_000,
     'courts.ie': 10_000,
+    'archive.org': 2_000, // Internet Archive — open API, public-domain texts
   },
   defaultDelayMs: 10_000,
   maxRetries: 4,

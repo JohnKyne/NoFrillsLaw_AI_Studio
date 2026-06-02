@@ -129,6 +129,16 @@ case-record system; CoA / Supreme / Circuit / District do **not**:
   whole High Court run). Even **2024** shows ~89 sequence gaps (citations
   assigned but not published) across all courts. Output `gap-audit/REPORT.md`
   is a Courts-Service-facing list of candidate omissions to query.
+- **Irish Reports — reported series (the `[IR]` editorial layer).** The *modern*
+  series (1894–present, ~9,400 selectively-reported cases pairing neutral ↔
+  `[IR]` citations) lives behind vLex/Justis/Lexis/Westlaw paywalls; it's ICLR's
+  curated database (EU sui-generis database right), so bulk extraction is out of
+  scope. BUT the **public-domain volumes, The Irish Reports 1894–1925** (64 vols,
+  complete) are digitised on the **Internet Archive** (open API) and captured by
+  the `irish-reports` collector — full text + a best-effort `[year] vol I.R.`
+  case index from each volume's "Table of Cases Reported". BAILII does *not*
+  carry the `[IR]` citation for its own cases (verified: 0/12 in a sample) — only
+  neutral citations — so it can't supply the neutral↔`[IR]` mapping.
 - **IRLII** (irlii.org, UCC) is a *front-end over BAILII* — its case links point
   straight at bailii.org; no distinct judgment corpus (its unique content is
   journal-article indexing). For judgments, BAILII is the source.

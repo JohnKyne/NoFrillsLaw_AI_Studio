@@ -11,6 +11,9 @@
  *   download <judgments|determinations|*-archive>  pull the PDFs (b)
  *   high-court [--from Y] [--to Y]    two-step High Court records (segmented)
  *              [--no-details]         list only (skip step 2)
+ *   irish-reports [--mode m]         public-domain Irish Reports 1894–1925 via
+ *                                    the Internet Archive. mode=metadata
+ *                                    (default, light) | text | pdf | all
  *   gap-audit  [--from Y] [--to Y]    flag judgments apparently MISSING from
  *                                    courts.ie via citation-sequence analysis;
  *                                    writes a Courts-Service-facing REPORT.md
@@ -43,6 +46,7 @@ import { collectProbate } from './collectors/probate.js';
 import { collectArchive } from './collectors/judgmentsArchive.js';
 import { collectLegalDiary } from './collectors/legalDiary.js';
 import { collectGapAudit } from './collectors/gapAudit.js';
+import { collectIrishReports, type IrishReportsMode } from './collectors/irishReportsArchive.js';
 
 function parseArgs(argv: string[]) {
   const flags: Record<string, string | boolean> = {};
@@ -125,6 +129,15 @@ async function main() {
       });
       break;
 
+    case 'irish-reports':
+      // Public-domain Irish Reports 1894–1925 via the Internet Archive.
+      // Default 'metadata' is light (one API call). text|pdf|all are heavy.
+      await collectIrishReports({
+        http, cfg,
+        mode: (flags.mode ? String(flags.mode) : 'metadata') as IrishReportsMode,
+      });
+      break;
+
     case 'gap-audit':
       // Flag judgments apparently missing from courts.ie (citation-sequence
       // analysis). Targeted year range only — not a blanket sweep.
@@ -161,7 +174,7 @@ async function main() {
       console.error(
         'Unknown command. Use: judgments | determinations | ' +
           'judgments-archive | determinations-archive | download | ' +
-          'high-court | probate | legal-diary | gap-audit | all\nSee crawler/README.md for flags.',
+          'high-court | probate | legal-diary | gap-audit | irish-reports | all\nSee crawler/README.md for flags.',
       );
       process.exit(1);
   }

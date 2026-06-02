@@ -50,6 +50,7 @@ crawler/
 | `probate` | `www.courts.ie/app/probate-register` | `probate.jsonl` | ✅ Full by year of death (empty-lastname + year = all grants for that year). |
 | `legal-diary` | `legaldiary.courts.ie/download` | `legal-diary/<date>__*.pdf\|docx`, `legal-diary.jsonl` | ⏩ Today's diary — **appellate + High Court lists only** (SC, CoA, Central Criminal, High Court lists). **Not** Circuit (separate JS section) or District (not published centrally). Forward-only — run on a schedule. |
 | `gap-audit` | `ww2.courts.ie/search/judgments-year` (citations only) | `gap-audit/REPORT.md`, `gap-audit.jsonl` | 🔎 Flags judgments **apparently missing** from courts.ie — for raising with the Courts Service. No PDF downloads. |
+| `irish-reports` | `archive.org` (open API) | `irish-reports/manifest.jsonl`, `…/case-index.jsonl`, `…/text/`, `…/pdf/` | 📚 **Public-domain** Irish Reports **1894–1925** (64 vols, complete). `--mode metadata` (light) lists all vols; `text\|pdf\|all` download + parse the case index. |
 
 ### Archive collector (plain HTTP)
 
@@ -95,6 +96,8 @@ npx tsx crawler/index.ts probate --years 2020,2021        # full year sweep
 npx tsx crawler/index.ts probate --lastnames murphy,kelly --years 2020
 npx tsx crawler/index.ts legal-diary                      # today's diary (appellate + High Court lists)
 npx tsx crawler/index.ts gap-audit --from 2024 --to 2024  # flag judgments missing from courts.ie
+npx tsx crawler/index.ts irish-reports                    # list PD Irish Reports 1894-1925 (metadata only)
+npx tsx crawler/index.ts irish-reports --mode all         # + download full text/PDF and parse case index (heavy)
 npx tsx crawler/index.ts all
 
 # global flags
