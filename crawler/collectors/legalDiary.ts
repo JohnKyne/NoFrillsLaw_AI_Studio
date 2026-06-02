@@ -1,11 +1,19 @@
 /**
  * Legal Diary — daily bulk download collector.
  *
- * The Legal Diary (legaldiary.courts.ie) publishes the full day's court
- * listings — every court including Circuit and District — as a single
- * "Downloadable Diary" document in PDF and DOCX. The per-court web pages render
- * their listings via JavaScript and the underlying data API is not openly
- * exposed, but this bulk file is a plain HTTP download and contains the lot.
+ * The Legal Diary (legaldiary.courts.ie) publishes a daily "Downloadable Diary"
+ * (PDF + DOCX). Per the site's own description it covers the APPELLATE and HIGH
+ * COURT lists only: Supreme Court, Court of Appeal (Civil/Criminal), Central
+ * Criminal Court, and the High Court lists (Today's Cases, Chancery, Commercial,
+ * Competition, Extradition, Family Law, Judicial Review, Before the Master,
+ * Non-Jury, Personal Injuries, Legal Costs Adjudicator, etc.).
+ *
+ * It does NOT include the Circuit Court or District Court (verified: a sample
+ * diary contained 0 "Circuit"/"District" tokens). Those live elsewhere on the
+ * site and are not part of this download — Circuit listings are in a separate
+ * JS-rendered section (/circuit-court, selectable per venue) with no open data
+ * API, and District listings are not published centrally at all (the
+ * /district-court page just refers you to each District Court Office).
  *
  *   GET https://legaldiary.courts.ie/download
  *     -> <a href="/legaldiary.nsf/page/download/$File/Downloadable Diary <date>.pdf">

@@ -116,16 +116,32 @@ case-record system; CoA / Supreme / Circuit / District do **not**:
 
 - Case *law* (judgments) on courts.ie covers Supreme (2001+), High Court &
   Court of Criminal Appeal (2004+), Court of Appeal (2014+) — i.e. the archive
-  above. Circuit/District seldom publish written judgments.
+  above. Circuit and District **do** publish a *thin* written-judgment corpus
+  (Circuit Court selected civil/criminal judgments; District Court childcare
+  judgments) — verified present in the index as IECC/IEDC (~a handful per year)
+  and the courts.ie judgment filter lists "Circuit Court" and "District Court".
+  These are already captured by the by-year archive (it pages every court).
+  Most Circuit/District work, though, is *ex tempore* and unreported.
+- **BAILII / IRLII** are free mirrors of the same SC/CoA/CCA/High judgments
+  (no Circuit or District series exist on BAILII — courts.ie is broader there).
+  Their one advantage is *reach*: BAILII's High Court series runs back to **1933**
+  and Supreme Court to **1965** (verified), decades before courts.ie's ~2001
+  floor. So a pre-2001 historical backfill, if ever wanted, means BAILII — but
+  it sits behind a JS anti-bot wall (needs a real browser). Not pulled for now.
 - Access to actual *court records* (files, pleadings, orders) for any court is,
   outside FOI, reserved to the parties / their legal reps; a non-party must
   apply to the relevant Court Office for a judge's decision — there is no public
   online register.
-- The **Legal Diary** (legaldiary.courts.ie) lists scheduled cases for every
-  court incl. Circuit and District — a *calendar*, not a records database. We
-  capture its daily bulk download via the `legal-diary` collector (PDF+DOCX,
-  forward-accumulating); the per-court structured listings are JS-rendered and
-  their data API is not openly exposed (403), so only the bulk file is pulled.
+- The **Legal Diary** (legaldiary.courts.ie) is a *calendar*, not a records
+  database. Its daily **Downloadable Diary** (what the `legal-diary` collector
+  pulls, PDF+DOCX, forward-accumulating) covers — per the site's own description
+  and verified against a sample — the **appellate + High Court lists only**
+  (Supreme, Court of Appeal Civil/Criminal, Central Criminal, and the High Court
+  lists: Today's Cases, Chancery, Commercial, Family Law, Judicial Review, etc.).
+  It does **not** include Circuit or District. Circuit Court listings exist in a
+  separate JS-rendered diary section (`/circuit-court`, per venue) with no open
+  data API; District Court listings are **not published centrally** at all — the
+  `/district-court` page refers enquirers to each District Court Office.
 - Historical Circuit/District files sit with the **National Archives**, which
   states they are *available onsite* (order and read in person) — physical,
   not crawlable; family-law files are closed to the public. Not pulled.
