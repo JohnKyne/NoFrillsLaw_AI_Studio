@@ -49,6 +49,7 @@ crawler/
 | `high-court` | `courts.ie/high-court-search` | `high-court-list.jsonl`, `high-court-detail.jsonl` | ✅ Full (year sweep; paging uncapped, verified to 25k). 1-based paging; `page=0` = count only. |
 | `probate` | `www.courts.ie/app/probate-register` | `probate.jsonl` | ✅ Full by year of death (empty-lastname + year = all grants for that year). |
 | `legal-diary` | `legaldiary.courts.ie/download` | `legal-diary/<date>__*.pdf\|docx`, `legal-diary.jsonl` | ⏩ Today's diary — **appellate + High Court lists only** (SC, CoA, Central Criminal, High Court lists). **Not** Circuit (separate JS section) or District (not published centrally). Forward-only — run on a schedule. |
+| `gap-audit` | `ww2.courts.ie/search/judgments-year` (citations only) | `gap-audit/REPORT.md`, `gap-audit.jsonl` | 🔎 Flags judgments **apparently missing** from courts.ie — for raising with the Courts Service. No PDF downloads. |
 
 ### Archive collector (plain HTTP)
 
@@ -93,6 +94,7 @@ npx tsx crawler/index.ts high-court --no-details          # list only (fast)
 npx tsx crawler/index.ts probate --years 2020,2021        # full year sweep
 npx tsx crawler/index.ts probate --lastnames murphy,kelly --years 2020
 npx tsx crawler/index.ts legal-diary                      # today's diary (appellate + High Court lists)
+npx tsx crawler/index.ts gap-audit --from 2024 --to 2024  # flag judgments missing from courts.ie
 npx tsx crawler/index.ts all
 
 # global flags
@@ -120,6 +122,28 @@ Prefer your own box instead of CI? A portable cron line:
 ```
 
 Both are idempotent — same-day re-runs skip already-captured files.
+
+## Auditing courts.ie for missing judgments (`gap-audit`)
+
+courts.ie is **not complete**, and this flags what's missing so it can be raised
+with the Courts Service. It downloads no PDFs — just neutral citations — and
+writes `gap-audit/REPORT.md` (a sendable list) from two signals:
+
+1. **Sequence gaps** — neutral citations run sequentially per court per year
+   ([2024] IEHC 1, 2, 3…), so a *missing number* is a judgment that was assigned
+   a citation but isn't online. Works for **any year, including recent** (no
+   second source needed). E.g. 2024 surfaced ~89 such gaps across all courts.
+2. **Wholesale-missing court-years** (range runs) — a court present in some
+   years but absent/near-absent in others, e.g. **High Court 2003–2004** (the
+   archive holds almost none; BAILII confirms ~400/yr existed). Sequence
+   analysis is blind to these — with zero citations there's no sequence — so
+   they're caught by comparing across years.
+
+Each flagged citation is a **candidate to verify**, not proof: a number may have
+been assigned and the judgment not delivered, or lawfully withheld/anonymised
+(e.g. childcare). For pre-~2005 years, missing citations can usually be
+**confirmed to exist on BAILII** (comprehensive there). Run it for a targeted
+year range, not as a blanket sweep — it paginates each year.
 
 ## Politeness & caveats
 

@@ -11,8 +11,11 @@
  *   download <judgments|determinations|*-archive>  pull the PDFs (b)
  *   high-court [--from Y] [--to Y]    two-step High Court records (segmented)
  *              [--no-details]         list only (skip step 2)
- *   legal-diary                      today's bulk Legal Diary (PDF+DOCX, all
- *                                    courts); run on a schedule to accumulate
+ *   gap-audit  [--from Y] [--to Y]    flag judgments apparently MISSING from
+ *                                    courts.ie via citation-sequence analysis;
+ *                                    writes a Courts-Service-facing REPORT.md
+ *   legal-diary                      today's Legal Diary (PDF+DOCX, appellate
+ *                                    + High Court lists); run on a schedule
  *   probate    [--years a,b,..]       probate grants — full year sweep
  *              [--lastnames a,b]      optional surname filter instead
  *   all                              run every collector sequentially
@@ -39,6 +42,7 @@ import { collectHighCourt } from './collectors/highCourt.js';
 import { collectProbate } from './collectors/probate.js';
 import { collectArchive } from './collectors/judgmentsArchive.js';
 import { collectLegalDiary } from './collectors/legalDiary.js';
+import { collectGapAudit } from './collectors/gapAudit.js';
 
 function parseArgs(argv: string[]) {
   const flags: Record<string, string | boolean> = {};
@@ -121,6 +125,16 @@ async function main() {
       });
       break;
 
+    case 'gap-audit':
+      // Flag judgments apparently missing from courts.ie (citation-sequence
+      // analysis). Targeted year range only — not a blanket sweep.
+      await collectGapAudit({
+        http, cfg,
+        fromYear: flags.from ? Number(flags.from) : thisYear - 1,
+        toYear: flags.to ? Number(flags.to) : thisYear,
+      });
+      break;
+
     case 'legal-diary':
       // Captures the CURRENT day's diary (all courts). Run on a schedule to
       // accumulate an archive — older editions aren't retained server-side.
@@ -147,7 +161,7 @@ async function main() {
       console.error(
         'Unknown command. Use: judgments | determinations | ' +
           'judgments-archive | determinations-archive | download | ' +
-          'high-court | probate | legal-diary | all\nSee crawler/README.md for flags.',
+          'high-court | probate | legal-diary | gap-audit | all\nSee crawler/README.md for flags.',
       );
       process.exit(1);
   }

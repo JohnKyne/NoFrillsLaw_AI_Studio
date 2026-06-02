@@ -122,6 +122,16 @@ case-record system; CoA / Supreme / Circuit / District do **not**:
   and the courts.ie judgment filter lists "Circuit Court" and "District Court".
   These are already captured by the by-year archive (it pages every court).
   Most Circuit/District work, though, is *ex tempore* and unreported.
+- **courts.ie is incomplete**, and the `gap-audit` collector flags what's
+  missing (neutral-citation sequence gaps + wholesale-missing court-years; no
+  PDF downloads). Measured: it holds ~98–164 judgments/yr for 2001–2004 then
+  ~500–1300/yr from 2005 — i.e. **2001–2004 are ~70–80% missing** (esp. the
+  whole High Court run). Even **2024** shows ~89 sequence gaps (citations
+  assigned but not published) across all courts. Output `gap-audit/REPORT.md`
+  is a Courts-Service-facing list of candidate omissions to query.
+- **IRLII** (irlii.org, UCC) is a *front-end over BAILII* — its case links point
+  straight at bailii.org; no distinct judgment corpus (its unique content is
+  journal-article indexing). For judgments, BAILII is the source.
 - **BAILII / IRLII** are free mirrors of the same SC/CoA/CCA/High judgments
   (no Circuit or District series exist on BAILII — courts.ie is broader there).
   Their one advantage is *reach*: BAILII's High Court series runs back to **1933**
