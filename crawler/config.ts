@@ -39,6 +39,7 @@ export const DEFAULT_CONFIG: CrawlerConfig = {
     'legaldiary.courts.ie': 10_000,
     'courts.ie': 10_000,
     'archive.org': 2_000, // Internet Archive — open API, public-domain texts
+    'www.bailii.org': 3_000, // BAILII — browser-driven (anti-bot); index pages only
   },
   defaultDelayMs: 10_000,
   maxRetries: 4,

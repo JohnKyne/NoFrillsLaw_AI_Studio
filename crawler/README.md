@@ -51,6 +51,7 @@ crawler/
 | `legal-diary` | `legaldiary.courts.ie/download` | `legal-diary/<date>__*.pdf\|docx`, `legal-diary.jsonl` | ⏩ Today's diary — **appellate + High Court lists only** (SC, CoA, Central Criminal, High Court lists). **Not** Circuit (separate JS section) or District (not published centrally). Forward-only — run on a schedule. |
 | `gap-audit` | `ww2.courts.ie/search/judgments-year` (citations only) | `gap-audit/REPORT.md`, `gap-audit.jsonl` | 🔎 Flags judgments **apparently missing** from courts.ie — for raising with the Courts Service. No PDF downloads. |
 | `irish-reports` | `archive.org` (open API) | `irish-reports/manifest.jsonl`, `…/case-index.jsonl`, `…/text/`, `…/pdf/` | 📚 **Public-domain** Irish Reports **1894–1925** (64 vols, complete). `--mode metadata` (light) lists all vols; `text\|pdf\|all` download + parse the case index. |
+| `bailii` | `bailii.org` (browser once, then HTTP) | `bailii-index.jsonl` | 🔁 Irish judgment index, **deduped vs courts.ie** → backfills the pre-2001/2005 hole. Needs a browser UA opt-in (see below). `--from`/`--to`. |
 
 ### Archive collector (plain HTTP)
 
@@ -147,6 +148,32 @@ been assigned and the judgment not delivered, or lawfully withheld/anonymised
 (e.g. childcare). For pre-~2005 years, missing citations can usually be
 **confirmed to exist on BAILII** (comprehensive there). Run it for a targeted
 year range, not as a blanket sweep — it paginates each year.
+
+## BAILII & the Anubis anti-bot (operator opt-in)
+
+`bailii` backfills the years courts.ie lacks (BAILII reaches back to ~1933 HC /
+1965 SC and is comprehensive 1996–2004). BAILII serves plain static HTML — no
+data API — but fronts it with **Anubis**, a proof-of-work anti-bot. The collector
+solves the PoW **once** in a real browser (`npx playwright install chromium`),
+takes the clearance cookie, then reads every per-year index page over normal
+rate-limited HTTP.
+
+By default it solves under our **honest identifying UA**, and Anubis **won't
+clear that** — so the command exits with guidance rather than bypassing anything.
+Anubis only clears *browser-like* User-Agents, so using BAILII via automation
+means presenting the crawler as a browser. That's an **operator decision**, opted
+into explicitly via `CRAWLER_UA`:
+
+```bash
+CRAWLER_UA="Mozilla/5.0 … Chrome/120 Safari/537.36" \
+  npx tsx crawler/index.ts bailii --from 1996 --to 2005
+```
+
+Rationale for treating this differently from paywalled sources: BAILII is **free,
+public-interest legal information** with no subscription, no contract barring
+access, and no commercial licensor; Anubis is load/abuse management, and we solve
+it legitimately and stay polite (index pages only, 3s/host, low volume). Use
+judgement and keep it light.
 
 ## Politeness & caveats
 

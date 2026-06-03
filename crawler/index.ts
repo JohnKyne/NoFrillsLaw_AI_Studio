@@ -47,6 +47,7 @@ import { collectArchive } from './collectors/judgmentsArchive.js';
 import { collectLegalDiary } from './collectors/legalDiary.js';
 import { collectGapAudit } from './collectors/gapAudit.js';
 import { collectIrishReports, type IrishReportsMode } from './collectors/irishReportsArchive.js';
+import { collectBailii } from './collectors/bailii.js';
 
 function parseArgs(argv: string[]) {
   const flags: Record<string, string | boolean> = {};
@@ -140,6 +141,17 @@ async function main() {
       });
       break;
 
+    case 'bailii':
+      // BAILII Irish judgment index (one-time browser for the anti-bot, then
+      // plain HTTP), deduped vs the courts.ie index. Fills the pre-2001/2005
+      // hole. Needs `npx playwright install chromium`.
+      await collectBailii({
+        http, cfg,
+        fromYear: flags.from ? Number(flags.from) : 1996,
+        toYear: flags.to ? Number(flags.to) : thisYear,
+      });
+      break;
+
     case 'gap-audit':
       // Flag judgments apparently missing from courts.ie (citation-sequence
       // analysis). Targeted year range only — not a blanket sweep.
@@ -176,7 +188,7 @@ async function main() {
       console.error(
         'Unknown command. Use: judgments | determinations | ' +
           'judgments-archive | determinations-archive | download | ' +
-          'high-court | probate | legal-diary | gap-audit | irish-reports | all\nSee crawler/README.md for flags.',
+          'high-court | probate | legal-diary | gap-audit | irish-reports | bailii | all\nSee crawler/README.md for flags.',
       );
       process.exit(1);
   }
