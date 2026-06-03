@@ -113,11 +113,11 @@ npx tsx crawler/index.ts all --metadata-only --parallel  # light index pass, con
 
 **AutoThrottle (on by default).** Scrapy-style: the per-host delay adapts from
 observed latency (`delay ≈ latency / target-concurrency`) and **doubles under
-429/5xx**, so you don't hand-tune delays. Crucially it treats each host's
-configured delay as a **floor** — so where a site publishes a `Crawl-delay`
-(courts.ie = 10s) it never tunes *below* it (it can only back off further); the
-speed-up benefit applies to hosts without a published crawl-delay. `--delay` now
-sets that floor; `minDelayMs` is the absolute safety floor.
+429/5xx**, so you don't hand-tune delays. It treats each host's configured delay
+as a **floor**. Per project decision the courts.ie `Crawl-delay: 10` is **not
+honoured** — those hosts use a 1s floor and AutoThrottle governs the rate (still
+backing off under load, which avoids getting blocked). `--delay` sets the floor;
+`minDelayMs` is the absolute safety floor.
 
 **Other hardening:** per-host limiting + bounded concurrency; retry/backoff; an
 **HTTP cache** (`--cache`, also dedups repeat URLs); resumable cursors; and
