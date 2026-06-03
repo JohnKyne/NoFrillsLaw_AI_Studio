@@ -28,9 +28,11 @@ export interface CrawlerConfig {
   outDir: string;
   /** Max concurrent in-flight requests PER HOST (1 = strict serial spacing). */
   concurrency: number;
-  /** AutoThrottle: adaptively lower per-host delay toward latency when healthy. */
+  /** AutoThrottle: adapt per-host delay from latency (Scrapy-style). Default on. */
   autoThrottle: boolean;
-  /** AutoThrottle floor (ms) — never go faster than this per host. */
+  /** AutoThrottle target: aim for ~this many concurrent requests on average. */
+  targetConcurrency: number;
+  /** Absolute floor (ms) for any host — AutoThrottle never goes below this. */
   minDelayMs: number;
   /** Backoff ceiling (ms) — per-host delay caps here under 429/5xx pressure. */
   maxDelayMs: number;
@@ -56,7 +58,8 @@ export const DEFAULT_CONFIG: CrawlerConfig = {
   requestTimeoutMs: 45_000,
   outDir: process.env.CRAWLER_OUT ?? new URL('./data', import.meta.url).pathname,
   concurrency: 1,
-  autoThrottle: false,
+  autoThrottle: true,
+  targetConcurrency: 1,
   minDelayMs: 1_000,
   maxDelayMs: 60_000,
   cache: false,

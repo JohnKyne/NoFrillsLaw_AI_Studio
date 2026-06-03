@@ -84,8 +84,10 @@ async function main() {
   }
   // Bounded in-flight requests PER HOST. >1 trades politeness for speed.
   if (flags.concurrency) cfg.concurrency = Math.max(1, Number(flags.concurrency));
-  // AutoThrottle: adaptively ease the per-host delay toward latency when healthy.
-  if (flags.autothrottle) cfg.autoThrottle = true;
+  // AutoThrottle is on by default (adapts per-host delay from latency, respecting
+  // each host's configured delay as a floor). Disable with --no-autothrottle.
+  if (flags['no-autothrottle']) cfg.autoThrottle = false;
+  if (flags['target-concurrency']) cfg.targetConcurrency = Math.max(0.1, Number(flags['target-concurrency']));
   // On-disk HTTP cache (free re-runs + request dedup).
   if (flags.cache) cfg.cache = true;
 

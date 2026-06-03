@@ -60,9 +60,13 @@ export class HttpClient {
   }
 
   /**
-   * AutoThrottle: the per-host delay is shared with the RateLimiter, so updating
-   * it here steers future request spacing. Backoff under 429/5xx is ALWAYS on
-   * (resilience); easing toward latency is opt-in (cfg.autoThrottle).
+   * AutoThrottle (Scrapy-style). The per-host delay is shared with the
+   * RateLimiter, so updating it here steers future request spacing.
+   *   - Backoff under 429/5xx is ALWAYS on (double the delay, up to maxDelay).
+   *   - On a healthy 2xx (and cfg.autoThrottle), ease toward latency/targetConcurrency.
+   * The host's CONFIGURED delay is treated as the polite floor — important where a
+   * site publishes a Crawl-delay (courts.ie = 10s), so we never tune below it.
+   * `minDelayMs` is only the floor for hosts you've configured below it.
    */
   private adapt(host: string, status: number, latencyMs: number): void {
     const cur = this.effDelay(host);
@@ -70,11 +74,10 @@ export class HttpClient {
       this.cfg.hostDelayMs[host] = Math.min(this.cfg.maxDelayMs, Math.round(cur * 2));
       return;
     }
-    const base = this.baseDelay[host] ?? this.cfg.defaultDelayMs;
-    const floor = this.cfg.autoThrottle ? this.cfg.minDelayMs : base;
-    // Target: toward observed latency when throttling adaptively, else recover to base.
-    const target = this.cfg.autoThrottle ? Math.max(this.cfg.minDelayMs, Math.min(base, latencyMs)) : base;
-    const eased = cur * 0.85 + target * 0.15;
+    if (!this.cfg.autoThrottle || status >= 300) return; // only adapt on healthy 2xx
+    const floor = Math.max(this.cfg.minDelayMs, this.baseDelay[host] ?? this.cfg.defaultDelayMs);
+    const target = latencyMs / Math.max(0.1, this.cfg.targetConcurrency);
+    const eased = (cur + target) / 2; // Scrapy: average current with the target
     this.cfg.hostDelayMs[host] = Math.round(Math.min(this.cfg.maxDelayMs, Math.max(floor, eased)));
   }
 

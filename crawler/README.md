@@ -103,19 +103,30 @@ npx tsx crawler/index.ts bailii --from 1996 --to 2005    # backfill index, dedup
 npx tsx crawler/index.ts all --metadata-only --parallel  # light index pass, concurrent across hosts
 
 # global flags
---delay <ms>        per-host crawl delay (default 10000 — robots Crawl-delay:10)
---concurrency <n>   max in-flight requests PER HOST (default 1; >1 = faster, less polite)
---autothrottle      adaptively ease per-host delay toward latency when healthy
---cache             on-disk cache of text/json responses (free re-runs + dedup)
---out <dir>         output dir (default crawler/data)
+--delay <ms>            per-host *floor* delay (default 10000 — courts.ie Crawl-delay:10)
+--concurrency <n>       max in-flight requests PER HOST (default 1; >1 = faster, less polite)
+--no-autothrottle       disable adaptive delay (AutoThrottle is ON by default)
+--target-concurrency <n> AutoThrottle target avg concurrency (default 1)
+--cache                 on-disk cache of text/json responses (free re-runs + dedup)
+--out <dir>             output dir (default crawler/data)
 ```
 
-**Hardening built in:** per-host rate limiting + bounded concurrency; retry with
-exponential backoff; **AutoThrottle** (always-on backoff under 429/5xx, opt-in
-adaptive speed-up); an **HTTP cache** (`--cache`) that also dedups repeat URLs;
-resumable cursors; and **provenance** on every record (`pdfUrl`/`bailiiUrl`/
-`detailUrl` + `sourceUrl` + `fetchedAt`/`scrapedAt`) so each row is re-verifiable
-at source. (robots.txt parsing intentionally not enabled — delays are hand-set.)
+**AutoThrottle (on by default).** Scrapy-style: the per-host delay adapts from
+observed latency (`delay ≈ latency / target-concurrency`) and **doubles under
+429/5xx**, so you don't hand-tune delays. Crucially it treats each host's
+configured delay as a **floor** — so where a site publishes a `Crawl-delay`
+(courts.ie = 10s) it never tunes *below* it (it can only back off further); the
+speed-up benefit applies to hosts without a published crawl-delay. `--delay` now
+sets that floor; `minDelayMs` is the absolute safety floor.
+
+**Other hardening:** per-host limiting + bounded concurrency; retry/backoff; an
+**HTTP cache** (`--cache`, also dedups repeat URLs); resumable cursors; and
+**provenance** on every record (`pdfUrl`/`bailiiUrl`/`detailUrl` + `sourceUrl` +
+`fetchedAt`/`scrapedAt`). robots.txt parsing intentionally not enabled.
+
+> Prefer an off-the-shelf framework? In Node the closest equivalent is
+> **Crawlee** (Apify) — its AutoscaledPool adapts concurrency to load/errors,
+> like Scrapy's AutoThrottle. Porting to Python **Scrapy** is the other option.
 
 **Speeding up a run.** courts.ie hard-caps page size (search 20, HCS 25 — no
 `rows`/`pageSize` override), so the levers are: (1) `all --parallel` — runs
