@@ -103,7 +103,7 @@ npx tsx crawler/index.ts bailii --from 1996 --to 2005    # backfill index, dedup
 npx tsx crawler/index.ts all --metadata-only --parallel  # light index pass, concurrent across hosts
 
 # global flags
---delay <ms>            per-host *floor* delay (default 10000 — courts.ie Crawl-delay:10)
+--delay <ms>            per-host floor delay (default 1000; courts.ie Crawl-delay NOT honoured)
 --concurrency <n>       max in-flight requests PER HOST (default 1; >1 = faster, less polite)
 --no-autothrottle       disable adaptive delay (AutoThrottle is ON by default)
 --target-concurrency <n> AutoThrottle target avg concurrency (default 1)

@@ -10,10 +10,11 @@ export interface CrawlerConfig {
   /** User-Agent sent on every request. Identify the crawler honestly. */
   userAgent: string;
   /**
-   * Minimum delay between requests *to the same host*, in milliseconds.
-   * robots.txt on www.courts.ie and www2.courts.ie both declare
-   * `Crawl-delay: 10`, so 10_000 is the polite default. The HCS API host
-   * (courts.ie) has no such directive but we stay polite by default.
+   * Minimum delay between requests *to the same host*, in milliseconds — the
+   * AutoThrottle floor. NOTE: courts.ie publishes `Crawl-delay: 10`; per project
+   * decision we do NOT honour it — these are set to a 1s safety floor and
+   * AutoThrottle + 429/5xx backoff govern the actual rate (so we still slow down
+   * if the server strains, which keeps us from being blocked).
    */
   hostDelayMs: Record<string, number>;
   /** Fallback delay for any host not listed above. */
@@ -44,15 +45,16 @@ export const DEFAULT_CONFIG: CrawlerConfig = {
   // No personal contact baked in — set CRAWLER_UA to add one if you want.
   userAgent: process.env.CRAWLER_UA ?? 'NoFrillsLaw-Research-Crawler/0.1',
   hostDelayMs: {
-    'www.courts.ie': 10_000,
-    'www2.courts.ie': 10_000,
-    'ww2.courts.ie': 10_000, // the by-year Solr search redirects here
-    'legaldiary.courts.ie': 10_000,
-    'courts.ie': 10_000,
+    // courts.ie Crawl-delay (10s) intentionally NOT honoured — 1s floor + AutoThrottle.
+    'www.courts.ie': 1_000,
+    'www2.courts.ie': 1_000,
+    'ww2.courts.ie': 1_000, // the by-year Solr search redirects here
+    'legaldiary.courts.ie': 1_000,
+    'courts.ie': 1_000,
     'archive.org': 2_000, // Internet Archive — open API, public-domain texts
     'www.bailii.org': 3_000, // BAILII — browser-driven (anti-bot); index pages only
   },
-  defaultDelayMs: 10_000,
+  defaultDelayMs: 2_000,
   maxRetries: 4,
   backoffBaseMs: 2_000,
   requestTimeoutMs: 45_000,
