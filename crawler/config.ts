@@ -29,9 +29,8 @@ export interface CrawlerConfig {
 }
 
 export const DEFAULT_CONFIG: CrawlerConfig = {
-  userAgent:
-    process.env.CRAWLER_UA ??
-    'NoFrillsLaw-Research-Crawler/0.1 (+contact: john@bazsar.com)',
+  // No personal contact baked in — set CRAWLER_UA to add one if you want.
+  userAgent: process.env.CRAWLER_UA ?? 'NoFrillsLaw-Research-Crawler/0.1',
   hostDelayMs: {
     'www.courts.ie': 10_000,
     'www2.courts.ie': 10_000,
