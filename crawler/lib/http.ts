@@ -45,7 +45,7 @@ export class HttpClient {
   private readonly jar = new CookieJar();
 
   constructor(private readonly cfg: CrawlerConfig) {
-    this.limiter = new RateLimiter(cfg.hostDelayMs, cfg.defaultDelayMs);
+    this.limiter = new RateLimiter(cfg.hostDelayMs, cfg.defaultDelayMs, cfg.concurrency);
   }
 
   private encodeForm(form: Record<string, string | string[]>): string {

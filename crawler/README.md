@@ -99,12 +99,23 @@ npx tsx crawler/index.ts legal-diary                      # today's diary (appel
 npx tsx crawler/index.ts gap-audit --from 2024 --to 2024  # flag judgments missing from courts.ie
 npx tsx crawler/index.ts irish-reports                    # list PD Irish Reports 1894-1925 (metadata only)
 npx tsx crawler/index.ts irish-reports --mode all         # + download full text/PDF and parse case index (heavy)
-npx tsx crawler/index.ts all
+npx tsx crawler/index.ts bailii --from 1996 --to 2005    # backfill index, deduped vs courts.ie
+npx tsx crawler/index.ts all --metadata-only --parallel  # light index pass, concurrent across hosts
 
 # global flags
---delay <ms>   per-host crawl delay (default 10000 — robots Crawl-delay:10)
---out <dir>    output dir (default crawler/data)
+--delay <ms>        per-host crawl delay (default 10000 — robots Crawl-delay:10)
+--concurrency <n>   max in-flight requests PER HOST (default 1; >1 = faster, less polite)
+--out <dir>         output dir (default crawler/data)
 ```
+
+**Speeding up a run.** courts.ie hard-caps page size (search 20, HCS 25 — no
+`rows`/`pageSize` override), so the levers are: (1) `all --parallel` — runs
+collectors concurrently; the per-host limiter still applies, so this only speeds
+work spanning *different* hosts (search `ww2` ∥ PDFs `www2` ∥ `archive.org` ∥
+`bailii.org` ∥ HCS `courts.ie`) — a free win; (2) lower `--delay`; (3)
+`--concurrency n` for bounded per-host parallelism (≈ n/delay throughput — less
+polite, risks blocks); (4) don't crawl the 508k HC *details* in full — list-only
++ selective details. `gap-audit` is derivable from `judgments-archive` offline.
 
 Re-running a command **resumes** from `data/.cursors/<collector>.json`. Delete
 the cursor file to restart a collector from scratch.

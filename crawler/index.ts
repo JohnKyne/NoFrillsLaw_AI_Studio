@@ -21,11 +21,16 @@
  *                                    + High Court lists); run on a schedule
  *   probate    [--years a,b,..]       probate grants — full year sweep
  *              [--lastnames a,b]      optional surname filter instead
- *   all                              run every collector sequentially
+ *   all [--parallel] [--metadata-only]
+ *                                    run every collector (sequential by default;
+ *                                    --parallel runs them concurrently across
+ *                                    hosts; --metadata-only = light index pass)
  *
  * Global flags:
- *   --delay <ms>   per-host crawl delay (default 10000, polite)
- *   --out <dir>    output directory (default ./crawler/data)
+ *   --delay <ms>      per-host crawl delay (default 10000, polite)
+ *   --concurrency <n> max in-flight requests PER HOST (default 1; >1 = faster,
+ *                     less polite — aggregate per-host rate ≈ n/delay)
+ *   --out <dir>       output directory (default ./crawler/data)
  *
  * State is checkpointed per collector under <out>/.cursors, so re-running a
  * command resumes. Nothing runs on import — you must invoke a command.
@@ -77,6 +82,8 @@ async function main() {
       Object.keys(cfg.hostDelayMs).map((h) => [h, ms]),
     );
   }
+  // Bounded in-flight requests PER HOST. >1 trades politeness for speed.
+  if (flags.concurrency) cfg.concurrency = Math.max(1, Number(flags.concurrency));
 
   const http = new HttpClient(cfg);
   const thisYear = new Date().getFullYear();
@@ -177,12 +184,36 @@ async function main() {
       break;
     }
 
-    case 'all':
-      await collectPdfListing({ http, cfg, name: 'judgments', listUrl: ENDPOINTS.judgmentsList });
-      await collectPdfListing({ http, cfg, name: 'determinations', listUrl: ENDPOINTS.determinationsList });
-      await collectHighCourt({ http, cfg, fromYear: HCS_MIN_YEAR, toYear: thisYear });
-      await collectProbate({ http, cfg, years: yearRange(thisYear - 30, thisYear) });
+    case 'all': {
+      // --metadata-only: the light index pass. Otherwise the full bulk crawl.
+      // --parallel: run collectors concurrently. The per-host rate limiter still
+      //   applies, so this only speeds up work that spans *different* hosts
+      //   (ww2 search ∥ www2 PDFs ∥ archive.org ∥ bailii.org ∥ courts.ie HCS).
+      const metaOnly = Boolean(flags['metadata-only']);
+      const tasks: Array<{ name: string; run: () => Promise<void> }> = metaOnly
+        ? [
+            { name: 'judgments-archive', run: () => collectArchive({ http, cfg, name: 'judgments-archive', searchPath: 'judgments-year', typeValue: 'Judgment', fromYear: ARCHIVE_MIN_YEAR, toYear: thisYear }) },
+            { name: 'determinations-archive', run: () => collectArchive({ http, cfg, name: 'determinations-archive', searchPath: 'determinations-year', typeValue: 'Determination', fromYear: ARCHIVE_MIN_YEAR, toYear: thisYear }) },
+            { name: 'irish-reports', run: () => collectIrishReports({ http, cfg, mode: 'metadata' }) },
+            { name: 'bailii', run: () => collectBailii({ http, cfg, fromYear: 1996, toYear: thisYear }) },
+          ]
+        : [
+            { name: 'judgments', run: () => collectPdfListing({ http, cfg, name: 'judgments', listUrl: ENDPOINTS.judgmentsList }) },
+            { name: 'determinations', run: () => collectPdfListing({ http, cfg, name: 'determinations', listUrl: ENDPOINTS.determinationsList }) },
+            { name: 'high-court', run: () => collectHighCourt({ http, cfg, fromYear: HCS_MIN_YEAR, toYear: thisYear }) },
+            { name: 'probate', run: () => collectProbate({ http, cfg, years: yearRange(thisYear - 30, thisYear) }) },
+          ];
+      if (flags.parallel) {
+        console.log(`[all] running ${tasks.length} collectors in parallel (per-host limits still enforced)`);
+        const results = await Promise.allSettled(tasks.map((t) => t.run()));
+        results.forEach((r, i) => {
+          if (r.status === 'rejected') console.error(`[all] ${tasks[i].name} failed:`, r.reason);
+        });
+      } else {
+        for (const t of tasks) await t.run();
+      }
       break;
+    }
 
     default:
       console.error(

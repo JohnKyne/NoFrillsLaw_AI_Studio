@@ -26,6 +26,8 @@ export interface CrawlerConfig {
   requestTimeoutMs: number;
   /** Root directory for JSONL output and cursor checkpoints. */
   outDir: string;
+  /** Max concurrent in-flight requests PER HOST (1 = strict serial spacing). */
+  concurrency: number;
 }
 
 export const DEFAULT_CONFIG: CrawlerConfig = {
@@ -45,6 +47,7 @@ export const DEFAULT_CONFIG: CrawlerConfig = {
   backoffBaseMs: 2_000,
   requestTimeoutMs: 45_000,
   outDir: process.env.CRAWLER_OUT ?? new URL('./data', import.meta.url).pathname,
+  concurrency: 1,
 };
 
 /** Known endpoints, kept in one place so they are easy to audit/adjust. */
