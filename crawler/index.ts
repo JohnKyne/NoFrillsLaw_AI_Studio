@@ -159,7 +159,7 @@ async function main() {
       // plain HTTP), deduped vs the courts.ie index. Fills the pre-2001/2005
       // hole. Needs `npx playwright install chromium`.
       await collectBailii({
-        http, cfg,
+        cfg,
         fromYear: flags.from ? Number(flags.from) : 1996,
         toYear: flags.to ? Number(flags.to) : thisYear,
       });
@@ -201,7 +201,7 @@ async function main() {
             { name: 'judgments-archive', run: () => collectArchive({ http, cfg, name: 'judgments-archive', searchPath: 'judgments-year', typeValue: 'Judgment', fromYear: ARCHIVE_MIN_YEAR, toYear: thisYear }) },
             { name: 'determinations-archive', run: () => collectArchive({ http, cfg, name: 'determinations-archive', searchPath: 'determinations-year', typeValue: 'Determination', fromYear: ARCHIVE_MIN_YEAR, toYear: thisYear }) },
             { name: 'irish-reports', run: () => collectIrishReports({ http, cfg, mode: 'metadata' }) },
-            { name: 'bailii', run: () => collectBailii({ http, cfg, fromYear: 1996, toYear: thisYear }) },
+            { name: 'bailii', run: () => collectBailii({ cfg, fromYear: 1996, toYear: thisYear }) },
           ]
         : [
             { name: 'judgments', run: () => collectPdfListing({ http, cfg, name: 'judgments', listUrl: ENDPOINTS.judgmentsList }) },

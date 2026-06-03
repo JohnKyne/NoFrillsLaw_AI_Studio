@@ -8,21 +8,22 @@
  * (a missing courts.ie citation that exists on BAILII = a proven omission).
  *
  * Transport: BAILII serves plain STATIC HTML (no data API), but fronts it with
- * "Anubis" — a proof-of-work anti-bot that plain HTTP can't pass. Verified that
- * the browser is only needed ONCE: solve the PoW, take the `…anubis-auth`
- * cookie, and every subsequent static page is fetchable over normal rate-limited
- * HTTP with that cookie. So we spin up Chromium a single time for the cookie
- * (needs `npx playwright install chromium`), then read every per-year index page
- * — each lists all its cases with name + neutral citation — through HttpClient.
+ * "Anubis" — a proof-of-work anti-bot. We tried solving the PoW once and reusing
+ * the cookie over plain HTTP, but Anubis re-challenges the non-browser client
+ * intermittently (it fingerprints beyond UA+cookie), so that was flaky. Instead
+ * we drive a real browser for the whole run — one Chromium, navigating each
+ * per-year index page (needs `npx playwright install chromium`). Anubis also
+ * refuses non-browser User-Agents outright, so this requires opting in to a
+ * browser UA via CRAWLER_UA (the collector refuses our honest UA and says so).
  *
  *   GET https://www.bailii.org/ie/cases/<SERIES>/<YEAR>/
  *
  * Each record is flagged `inCourtsIe` by matching its neutral citation against
  * the judgments-archive index (if present), so BAILII-only rows are the backfill.
  */
+import type { Browser, Page } from 'playwright';
 import { JsonlWriter } from '../lib/jsonl.js';
 import { Cursor } from '../lib/cursor.js';
-import { HttpClient } from '../lib/http.js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CrawlerConfig } from '../config.js';
@@ -42,62 +43,62 @@ const COURT_NAMES: Record<string, string> = {
 interface BailiiCursor { done: string[]; }
 
 /**
- * Solve the Anubis proof-of-work once (real browser) and return a Cookie header.
- * Solved under the SAME UA the HttpClient uses — Anubis binds the clearance to
- * the User-Agent, so this keeps our honest identifying UA end-to-end (no spoof).
+ * Launch a browser and clear Anubis (PoW). Returns the open browser+page for
+ * reuse across the whole run. Throws if Anubis won't clear (non-browser UA):
+ * the `-anubis-auth` cookie is the proof the PoW finished.
  */
-async function solveAnubis(ua: string): Promise<string> {
+async function openClearedBrowser(ua: string): Promise<{ browser: Browser; page: Page }> {
   const { chromium } = await import('playwright');
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ userAgent: ua, ignoreHTTPSErrors: true });
     await page.goto(`${HOST}/ie/cases/IEHC/2003/`, { waitUntil: 'networkidle', timeout: 60_000 });
-    // The PoW resolves asynchronously — poll for the auth cookie (up to ~15s).
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 20; i++) {
       const cookies = await page.context().cookies();
-      const header = cookies
-        .filter((c) => /anubis/i.test(c.name))
-        .map((c) => `${c.name}=${c.value}`)
-        .join('; ');
-      if (header) return header;
+      if (cookies.some((c) => /anubis-auth/i.test(c.name))) return { browser, page };
       await page.waitForTimeout(1_000);
     }
-    throw new Error('no Anubis cookie obtained');
-  } finally {
+    throw new Error('Anubis auth cookie not obtained (UA likely rejected)');
+  } catch (err) {
     await browser.close();
+    throw err;
   }
 }
 
-/** Pull {name, citation, court, year, url} from a per-year index page's HTML. */
+/**
+ * Pull {name, citation, court, year, url} from a per-year index page's HTML.
+ * BAILII renders TWO anchors per case sharing one href: a name anchor
+ * ("Carroll v. Ryan") and a citation anchor ("[2003] IESC 1"). Group by href to
+ * pair them; take the citation from the citation anchor (authoritative).
+ */
 function parseYearHtml(html: string, series: string, year: number, sourceUrl: string) {
-  const re = new RegExp(`href="(/ie/cases/${series}/${year}/[^"]+)"[^>]*>([^<]+)<`, 'gi');
-  const out: Array<{ caseName: string; citation: string; court: string; courtName: string; year: number; bailiiUrl: string; sourceUrl: string; fetchedAt: string }> = [];
-  const seen = new Set<string>();
+  const re = new RegExp(`<a[^>]*href="(/ie/cases/${series}/${year}/[^"]+)"[^>]*>([^<]*)</a>`, 'gi');
+  const byHref = new Map<string, { name: string; citation: string }>();
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
+    const href = m[1];
     const text = m[2].replace(/\s+/g, ' ').trim();
+    const cur = byHref.get(href) ?? { name: '', citation: '' };
     const c = text.match(/\[(\d{4})\]\s*(IE[A-Z]+)\s*(\d+)/i);
-    if (!c) continue;
-    const citation = `${c[1]}_${c[2].toUpperCase()}_${c[3]}`; // courts.ie key format
-    if (seen.has(citation)) continue; // collapse multi-part files of one case
-    seen.add(citation);
+    if (c) cur.citation = `${c[1]}_${c[2].toUpperCase()}_${c[3]}`; // courts.ie key format
+    else if (text && !cur.name) cur.name = text; // the name anchor
+    byHref.set(href, cur);
+  }
+  const out: Array<{ caseName: string; citation: string; court: string; courtName: string; year: number; bailiiUrl: string; sourceUrl: string; fetchedAt: string }> = [];
+  for (const [href, { name, citation }] of byHref) {
+    if (!citation) continue;
     out.push({
-      caseName: text.split(/\s*\[\d{4}\]/)[0].replace(/[\s,;-]+$/, '').trim(),
+      caseName: name,
       citation,
-      court: c[2].toUpperCase(),
-      courtName: COURT_NAMES[c[2].toUpperCase()] ?? c[2].toUpperCase(),
-      year: Number(c[1]),
-      bailiiUrl: new URL(m[1], HOST).toString(),
+      court: series,
+      courtName: COURT_NAMES[series] ?? series,
+      year,
+      bailiiUrl: new URL(href, HOST).toString(),
       sourceUrl,
       fetchedAt: new Date().toISOString(),
     });
   }
   return out;
-}
-
-/** Looks like the Anubis challenge page rather than a real index? */
-function isChallenge(html: string): boolean {
-  return /anubis|making sure you|not a robot/i.test(html) && !/\/ie\/cases\//i.test(html);
 }
 
 async function loadCourtsIeCitations(outDir: string): Promise<Set<string>> {
@@ -116,25 +117,27 @@ async function loadCourtsIeCitations(outDir: string): Promise<Set<string>> {
 }
 
 export async function collectBailii(opts: {
-  http: HttpClient;
   cfg: CrawlerConfig;
   fromYear: number;
   toYear: number;
   series?: readonly string[];
 }): Promise<void> {
-  const { http, cfg, fromYear, toYear } = opts;
+  const { cfg, fromYear, toYear } = opts;
   const series = opts.series ?? BAILII_SERIES;
+  const delayMs = cfg.hostDelayMs['www.bailii.org'] ?? cfg.defaultDelayMs;
 
   const cie = await loadCourtsIeCitations(cfg.outDir);
   console.log(`[bailii] dedup against ${cie.size} courts.ie citations.`);
-  console.log(`[bailii] solving Anubis proof-of-work (one-time browser, UA="${cfg.userAgent}")…`);
-  let cookie: string;
+  console.log(`[bailii] opening browser + clearing Anubis (UA="${cfg.userAgent}")…`);
+
+  let browser: Browser;
+  let page: Page;
   try {
-    cookie = await solveAnubis(cfg.userAgent);
+    ({ browser, page } = await openClearedBrowser(cfg.userAgent));
   } catch {
-    // BAILII's Anubis anti-bot only clears browser-like User-Agents; it will not
-    // clear our honest identifying UA. Bypassing it means presenting as a browser
-    // — a deliberate choice left to the operator, NOT a default.
+    // Anubis only clears browser-like User-Agents — it won't clear our honest UA.
+    // Bypassing it means presenting as a browser: a deliberate operator choice,
+    // NOT a default. Refuse and tell the user how to opt in explicitly.
     console.error(
       '[bailii] Anubis did not clear UA "' + cfg.userAgent + '".\n' +
       '         BAILII\'s anti-bot only clears browser-like User-Agents. To proceed you\n' +
@@ -163,11 +166,10 @@ export async function collectBailii(opts: {
         const url = `${HOST}/ie/cases/${s}/${year}/`;
         let html = '';
         try {
-          html = await http.text(url, { headers: { Cookie: cookie } });
-          if (isChallenge(html)) { // cookie expired — re-solve once
-            cookie = await solveAnubis(cfg.userAgent);
-            html = await http.text(url, { headers: { Cookie: cookie } });
-          }
+          // Drive the browser per page — Anubis re-challenges plain HTTP, but a
+          // real navigation in the cleared session is reliable.
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+          html = await page.content();
         } catch (err) {
           console.warn(`[bailii] ${key}: ${(err as Error).message.slice(0, 60)}`);
         }
@@ -184,10 +186,12 @@ export async function collectBailii(opts: {
         }
         done.add(key);
         await cursor.save({ done: [...done] });
+        await page.waitForTimeout(delayMs); // politeness between navigations
       }
     }
   } finally {
     await writer.close();
+    await browser.close();
   }
   console.log(`[bailii] done: ${total} cases indexed, ${backfill} not on courts.ie (backfill candidates).`);
 }

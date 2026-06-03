@@ -56,7 +56,8 @@ function parsePage(html: string, page: number, sourceUrl: string): JudgmentRecor
     out.push({
       citation,
       court: courtFromCitation(citation),
-      pdfUrl: new URL(pathPart, 'https://www2.courts.ie').toString(),
+      // Alfresco serves the file at <path>.pdf/pdf — the bare .pdf 500s.
+      pdfUrl: new URL(`${pathPart}/pdf`, 'https://www2.courts.ie').toString(),
       documentId: uuid,
       title: decodeURIComponent(filename).replace(/\.pdf$/i, '').replace(/_/g, ' '),
       page,
