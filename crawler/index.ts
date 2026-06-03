@@ -84,6 +84,10 @@ async function main() {
   }
   // Bounded in-flight requests PER HOST. >1 trades politeness for speed.
   if (flags.concurrency) cfg.concurrency = Math.max(1, Number(flags.concurrency));
+  // AutoThrottle: adaptively ease the per-host delay toward latency when healthy.
+  if (flags.autothrottle) cfg.autoThrottle = true;
+  // On-disk HTTP cache (free re-runs + request dedup).
+  if (flags.cache) cfg.cache = true;
 
   const http = new HttpClient(cfg);
   const thisYear = new Date().getFullYear();

@@ -105,8 +105,17 @@ npx tsx crawler/index.ts all --metadata-only --parallel  # light index pass, con
 # global flags
 --delay <ms>        per-host crawl delay (default 10000 — robots Crawl-delay:10)
 --concurrency <n>   max in-flight requests PER HOST (default 1; >1 = faster, less polite)
+--autothrottle      adaptively ease per-host delay toward latency when healthy
+--cache             on-disk cache of text/json responses (free re-runs + dedup)
 --out <dir>         output dir (default crawler/data)
 ```
+
+**Hardening built in:** per-host rate limiting + bounded concurrency; retry with
+exponential backoff; **AutoThrottle** (always-on backoff under 429/5xx, opt-in
+adaptive speed-up); an **HTTP cache** (`--cache`) that also dedups repeat URLs;
+resumable cursors; and **provenance** on every record (`pdfUrl`/`bailiiUrl`/
+`detailUrl` + `sourceUrl` + `fetchedAt`/`scrapedAt`) so each row is re-verifiable
+at source. (robots.txt parsing intentionally not enabled — delays are hand-set.)
 
 **Speeding up a run.** courts.ie hard-caps page size (search 20, HCS 25 — no
 `rows`/`pageSize` override), so the levers are: (1) `all --parallel` — runs

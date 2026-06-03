@@ -128,12 +128,10 @@ export async function collectHighCourt(opts: {
   /** Step 2: fetch + write the full detail record for one list row. */
   const enrich = async (row: HcsListRow) => {
     try {
-      const detail = await http.json<HcsCaseRecord>(
-        ENDPOINTS.hcsGetDetails + encodeURIComponent(row.arch_name),
-        { headers: XHR_HEADERS },
-      );
+      const detailUrl = ENDPOINTS.hcsGetDetails + encodeURIComponent(row.arch_name);
+      const detail = await http.json<HcsCaseRecord>(detailUrl, { headers: XHR_HEADERS });
       await detailWriter.write({
-        ...row, ...detail, scrapedAt: new Date().toISOString(),
+        ...row, ...detail, detailUrl, scrapedAt: new Date().toISOString(),
       } satisfies HcsCaseRecord);
     } catch (err) {
       console.warn(

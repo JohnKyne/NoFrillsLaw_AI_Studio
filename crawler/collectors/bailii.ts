@@ -69,9 +69,9 @@ async function solveAnubis(ua: string): Promise<string> {
 }
 
 /** Pull {name, citation, court, year, url} from a per-year index page's HTML. */
-function parseYearHtml(html: string, series: string, year: number) {
+function parseYearHtml(html: string, series: string, year: number, sourceUrl: string) {
   const re = new RegExp(`href="(/ie/cases/${series}/${year}/[^"]+)"[^>]*>([^<]+)<`, 'gi');
-  const out: Array<{ caseName: string; citation: string; court: string; courtName: string; year: number; bailiiUrl: string }> = [];
+  const out: Array<{ caseName: string; citation: string; court: string; courtName: string; year: number; bailiiUrl: string; sourceUrl: string; fetchedAt: string }> = [];
   const seen = new Set<string>();
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
@@ -88,6 +88,8 @@ function parseYearHtml(html: string, series: string, year: number) {
       courtName: COURT_NAMES[c[2].toUpperCase()] ?? c[2].toUpperCase(),
       year: Number(c[1]),
       bailiiUrl: new URL(m[1], HOST).toString(),
+      sourceUrl,
+      fetchedAt: new Date().toISOString(),
     });
   }
   return out;
@@ -169,7 +171,7 @@ export async function collectBailii(opts: {
         } catch (err) {
           console.warn(`[bailii] ${key}: ${(err as Error).message.slice(0, 60)}`);
         }
-        const cases = html ? parseYearHtml(html, s, year) : [];
+        const cases = html ? parseYearHtml(html, s, year, url) : [];
         for (const c of cases) {
           const inCourtsIe = cie.has(c.citation);
           if (!inCourtsIe) backfill++;

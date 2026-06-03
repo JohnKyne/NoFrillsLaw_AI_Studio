@@ -109,7 +109,7 @@ export async function collectProbate(opts: {
         await cursor.save(state);
         continue;
       }
-      for (const g of grants) await writer.write(g);
+      for (const g of grants) await writer.write({ ...g, sourceUrl: url });
       state.totalGrants += grants.length;
       state.nextPage += 1;
       await cursor.save(state);

@@ -43,7 +43,7 @@ function archiveUrl(searchPath: string, typeValue: string, year: number, page: n
 }
 
 /** Extract distinct judgment PDFs (excluding chrome) from a results page. */
-function parsePage(html: string, page: number): JudgmentRecord[] {
+function parsePage(html: string, page: number, sourceUrl: string): JudgmentRecord[] {
   const out: JudgmentRecord[] = [];
   const seen = new Set<string>();
   const re = /href="(\/acc\/alfresco\/([0-9a-f-]{36})\/([^"\/]+?\.pdf))(?:\/pdf[^"]*)?"/gi;
@@ -60,6 +60,7 @@ function parsePage(html: string, page: number): JudgmentRecord[] {
       documentId: uuid,
       title: decodeURIComponent(filename).replace(/\.pdf$/i, '').replace(/_/g, ' '),
       page,
+      sourceUrl,
       scrapedAt: new Date().toISOString(),
     });
   }
@@ -107,8 +108,9 @@ export async function collectArchive(opts: {
   try {
     while (state.yearQueue.length > 0) {
       const year = state.yearQueue[0];
-      const html = await http.text(archiveUrl(searchPath, typeValue, year, state.nextPage));
-      const rows = parsePage(html, state.nextPage).filter((r) => !seen.has(r.documentId!));
+      const pageUrl = archiveUrl(searchPath, typeValue, year, state.nextPage);
+      const html = await http.text(pageUrl);
+      const rows = parsePage(html, state.nextPage, pageUrl).filter((r) => !seen.has(r.documentId!));
 
       if (rows.length === 0) {
         // Empty page -> this year is exhausted; advance.

@@ -6,7 +6,9 @@
  * courts.ie session handling (ASP.NET_SessionId on courts.ie) requires.
  */
 import { RateLimiter } from './rateLimiter.js';
+import { HttpCache } from './httpCache.js';
 import type { CrawlerConfig } from '../config.js';
+import path from 'node:path';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -43,9 +45,37 @@ export interface RequestOptions {
 export class HttpClient {
   private readonly limiter: RateLimiter;
   private readonly jar = new CookieJar();
+  private readonly cache?: HttpCache;
+  /** Original configured delays — AutoThrottle recovers toward these. */
+  private readonly baseDelay: Record<string, number>;
 
   constructor(private readonly cfg: CrawlerConfig) {
     this.limiter = new RateLimiter(cfg.hostDelayMs, cfg.defaultDelayMs, cfg.concurrency);
+    this.baseDelay = { ...cfg.hostDelayMs };
+    if (cfg.cache) this.cache = new HttpCache(path.join(cfg.outDir, '.cache'));
+  }
+
+  private effDelay(host: string): number {
+    return this.cfg.hostDelayMs[host] ?? this.cfg.defaultDelayMs;
+  }
+
+  /**
+   * AutoThrottle: the per-host delay is shared with the RateLimiter, so updating
+   * it here steers future request spacing. Backoff under 429/5xx is ALWAYS on
+   * (resilience); easing toward latency is opt-in (cfg.autoThrottle).
+   */
+  private adapt(host: string, status: number, latencyMs: number): void {
+    const cur = this.effDelay(host);
+    if (status === 429 || status >= 500) {
+      this.cfg.hostDelayMs[host] = Math.min(this.cfg.maxDelayMs, Math.round(cur * 2));
+      return;
+    }
+    const base = this.baseDelay[host] ?? this.cfg.defaultDelayMs;
+    const floor = this.cfg.autoThrottle ? this.cfg.minDelayMs : base;
+    // Target: toward observed latency when throttling adaptively, else recover to base.
+    const target = this.cfg.autoThrottle ? Math.max(this.cfg.minDelayMs, Math.min(base, latencyMs)) : base;
+    const eased = cur * 0.85 + target * 0.15;
+    this.cfg.hostDelayMs[host] = Math.round(Math.min(this.cfg.maxDelayMs, Math.max(floor, eased)));
   }
 
   private encodeForm(form: Record<string, string | string[]>): string {
@@ -60,22 +90,36 @@ export class HttpClient {
     return parts.join('&');
   }
 
-  /** Fetch raw text, with rate limiting, cookies, and retry/backoff. */
-  async text(url: string, opts: RequestOptions = {}): Promise<string> {
+  /** Body fetch with on-disk cache (text/json paths). Streaming downloads use raw(). */
+  private async fetchBody(
+    url: string,
+    opts: RequestOptions,
+  ): Promise<{ status: number; contentType: string; body: string }> {
+    const method = opts.method ?? (opts.form ? 'POST' : 'GET');
+    const key = HttpCache.key(method, url, opts.form ? this.encodeForm(opts.form) : '');
+    if (this.cache) {
+      const hit = await this.cache.read(key);
+      if (hit) return hit;
+    }
     const res = await this.raw(url, opts);
-    return res.text();
+    const out = { status: res.status, contentType: res.headers.get('content-type') ?? '', body: await res.text() };
+    if (this.cache && res.status < 300) await this.cache.write(key, out);
+    return out;
+  }
+
+  /** Fetch raw text, with rate limiting, cookies, retry/backoff, and cache. */
+  async text(url: string, opts: RequestOptions = {}): Promise<string> {
+    return (await this.fetchBody(url, opts)).body;
   }
 
   /** Fetch and parse JSON. Throws if the response isn't JSON (e.g. an HTML
    *  error/redirect page — a common HCS failure mode for malformed queries). */
   async json<T>(url: string, opts: RequestOptions = {}): Promise<T> {
-    const res = await this.raw(url, opts);
-    const body = await res.text();
-    const ct = res.headers.get('content-type') ?? '';
-    if (!ct.includes('application/json')) {
+    const { status, contentType, body } = await this.fetchBody(url, opts);
+    if (!contentType.includes('application/json')) {
       throw new Error(
-        `Expected JSON from ${url} but got ${ct || 'unknown'} ` +
-          `(status ${res.status}). First 120 chars: ${body.slice(0, 120)}`,
+        `Expected JSON from ${url} but got ${contentType || 'unknown'} ` +
+          `(status ${status}). First 120 chars: ${body.slice(0, 120)}`,
       );
     }
     return JSON.parse(body) as T;
@@ -106,6 +150,7 @@ export class HttpClient {
       await this.limiter.acquire(host);
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), this.cfg.requestTimeoutMs);
+      const started = Date.now();
       try {
         const res = await fetch(url, {
           method,
@@ -115,6 +160,7 @@ export class HttpClient {
           signal: ctrl.signal,
         });
         clearTimeout(timer);
+        this.adapt(host, res.status, Date.now() - started); // AutoThrottle
 
         // Persist any Set-Cookie for this host (undici exposes getSetCookie).
         const setCookies =

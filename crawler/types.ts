@@ -14,6 +14,8 @@ export interface JudgmentRecord {
   title: string | null;
   /** Listing page number this record was found on. */
   page: number;
+  /** URL of the search-results page this record was found on (provenance). */
+  sourceUrl?: string;
   /** ISO timestamp when scraped. */
   scrapedAt: string;
 }
@@ -48,6 +50,8 @@ export interface HcsCaseRecord extends HcsListRow {
   related_cases?: unknown[];
   arch_appealcasereference?: string;
   arch_setdowndate?: string | null;
+  /** GetCaseRefDetails URL for this case (provenance / re-fetch). */
+  detailUrl?: string;
   /** ISO timestamp when the detail call completed. */
   scrapedAt: string;
 }
